@@ -9,4 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Wavebird::Configuration` + `Wavebird.configure`: defaults and numeric
+  clamping mirroring the upstream TS SDK (`timeout_ms`, `decision_timeout_ms`,
+  `long_poll_wait_ms`, `short_poll_interval_ms`), HTTPS-except-localhost base
+  URL validation, callable secret key support, secret redaction in `inspect`.
+- `Wavebird::Error` hierarchy: typed exceptions per API error code
+  (`unauthorized`, `forbidden`, `rate_limited` with `retry_after`,
+  `validation_error`, `not_found`), transport errors, `request_id`/`docs_url`/
+  `http_status` on every error.
 - Gem skeleton: gemspec, module layout, test/lint tooling, CI.
