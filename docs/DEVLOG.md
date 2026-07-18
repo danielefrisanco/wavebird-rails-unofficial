@@ -2,6 +2,24 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-18 (later) — Phase 0: parity
+
+**Done**
+- Initial commit on `main`; phase work on branch `phase-0-parity`.
+- Snapshotted docs (md-converted) + `render.js` into `docs/upstream/` (gitignored per Daniele — local reference only, like `upstream/`).
+- Changelog/versioning re-checked: latest entry "2026 Q2", no drift vs build prompt.
+- Full parity table written: `docs/parity.md` (verified against source, incl. client option defaults/clamps, fail-silent posture, normalization rules, canonical enums).
+- Decision #002 investigated (recommend port); new open decisions #003 (error posture), #004 (callback delivery mode).
+
+**Todo**
+- Daniele's calls on #002/#003/#004, then Phase 1 (gem skeleton) on a new branch.
+- Later: TCF consent-string support (upstream `./consent` subpath); Rails↔wavebird WS transport (#001).
+
+**Problems found**
+- npm SDK self-deprecates at import ("advanced compatibility layer"; baseline is API-first) — confirms our REST-canonical architecture; gem must NOT mirror legacy `/public/wrapper/v1/*` transport.
+- TS↔build-prompt conflict on error handling (→ #003); build prompt's beacon `completed` event exists in canonical enum but upstream SDK maps a richer legacy set — canonical names adopted.
+- Docs pages are JS-chromed HTML; wrote a local extractor (scratchpad `html2md.py`) for diffable md snapshots.
+
 ## 2026-07-18
 
 **Done**
