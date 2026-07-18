@@ -2,6 +2,27 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-18 (night) — Phase 3: value objects
+
+**Done**
+- Branch `phase-3-types`: `Wavebird::Types` ported field-for-field from
+  `public_contracts/wrapper.ts` + `common.ts` + the Server API placement shape
+  (`WavebirdPlacement`): PlacementResponse, Placement, Render, Decision
+  (3 variants), Creative, NativeAssets, AcceptedJob, BeaconResult,
+  ConsentState, ProjectConfig. Tolerant reads, raw preserved, string/symbol
+  keys accepted. 88 examples, 100% line+branch, RuboCop clean.
+
+**Todo**
+- Phase 4 next: HTTP client endpoint-by-endpoint (branch `phase-4-client`).
+
+**Problems found**
+- Redaction specs caught a real leak: `render.frame_url` embeds the asset
+  token (`/v1/render/{asset_token}`), so masking only `asset_token` wasn't
+  enough — `frame_url` is now masked too (SafeInspect#extra_sensitive_members).
+- Ruby gotcha: constants assigned inside a `Data.define` block are lexically
+  scoped to the enclosing module, not the new class — used a class method
+  instead.
+
 ## 2026-07-18 (evening) — Phase 2: configuration + errors
 
 **Done**
