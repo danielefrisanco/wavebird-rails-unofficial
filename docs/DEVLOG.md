@@ -2,6 +2,26 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-18 (evening) — Phase 2: configuration + errors
+
+**Done**
+- Daniele confirmed: gemspec homepage OK for now, Ruby >= 3.2 floor OK,
+  workflow is local-only (no GitHub remote yet; CI file kept for later).
+- Branch `phase-2-config-errors`: `Wavebird::Configuration` (upstream-parity
+  defaults/clamps from `clampInt` call sites, HTTPS-except-localhost URL
+  normalization from `normalizeBaseUrl`, callable secret key per `getApiKey`,
+  redacting `inspect`), `Wavebird::Error` hierarchy per §3.9 + decision #003,
+  `Wavebird.configure/configuration/reset_configuration!`.
+- 65 examples green, 100% line+branch coverage, RuboCop clean.
+
+**Todo**
+- Phase 3 next: value objects (types) from `public_contracts/wrapper.ts`.
+
+**Problems found**
+- Deviation noted in code docs: non-numeric config values raise
+  `ConfigurationError` (TS compiler rejects these at build time — raising is
+  the Ruby analog; clamping/nil-default behavior matches upstream exactly).
+
 ## 2026-07-18 (later still) — Phase 1: skeleton
 
 **Done**

@@ -27,3 +27,13 @@ Metrics/BlockLength:
   Exclude:
     - "spec/**/*"
     - "*.gemspec"
+
+RSpec/MultipleExpectations:
+  Max: 5
+
+RSpec/ExampleLength:
+  Max: 12
+
+# Spec files may cover several small sibling classes (e.g. the error hierarchy).
+RSpec/SpecFilePathFormat:
+  Enabled: false
