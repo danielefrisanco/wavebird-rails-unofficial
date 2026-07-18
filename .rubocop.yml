@@ -23,6 +23,12 @@ Style/Documentation:
 Layout/LineLength:
   Max: 120
 
+# types.rb deliberately mirrors upstream's single public_contracts file and
+# grows with the API contract.
+Metrics/ModuleLength:
+  Exclude:
+    - "lib/wavebird/types.rb"
+
 Metrics/BlockLength:
   Exclude:
     - "spec/**/*"

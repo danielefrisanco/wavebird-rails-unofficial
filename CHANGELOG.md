@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Wavebird::Types` value objects mirroring the upstream public contracts
+  field-for-field: `PlacementResponse` (null placement = first-class no-fill),
+  `Placement`, `Render`, `Decision` (pending/no-fill/fill variants),
+  `Creative`, `NativeAssets`, `AcceptedJob`, `BeaconResult`, `ConsentState`,
+  `ProjectConfig`. Tolerant reads (unknown fields kept in `raw`), and
+  `asset_token`/`frame_url` redacted from all inspection output.
 - `Wavebird::Configuration` + `Wavebird.configure`: defaults and numeric
   clamping mirroring the upstream TS SDK (`timeout_ms`, `decision_timeout_ms`,
   `long_poll_wait_ms`, `short_poll_interval_ms`), HTTPS-except-localhost base
