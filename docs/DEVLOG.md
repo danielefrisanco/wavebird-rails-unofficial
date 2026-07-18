@@ -2,6 +2,32 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-18 (later still) — Phase 1: skeleton
+
+**Done**
+- Decisions #002/#003/#004 approved by Daniele (see DECISIONS.md); recorded.
+- Branch `phase-1-skeleton`: gemspec (faraday ~> 2, railties >= 7.1 < 9,
+  Ruby >= 3.2 floor, rubygems_mfa_required), lib entry points, MIT license
+  with upstream attribution, Keep-a-Changelog, pre-release README.
+- Tooling: RSpec + SimpleCov (100% line+branch enforced) + WebMock
+  (net disabled) + dotenv (`.env.test`, example committed), RuboCop
+  (+rake/+rspec plugins) clean, `rake` default = spec + rubocop — all green.
+- CI: GitHub Actions, Ruby 3.2/3.3/3.4 matrix + lint job.
+- Local dev pinned to Ruby 3.3.0 (`.ruby-version`, rbenv); `gem build`
+  verified — packaged files exclude specs/docs.
+
+**Todo**
+- Confirm gemspec `homepage` URL with Daniele (assumed
+  `github.com/danielefrisanco/wavebird-rails`; no remote configured yet).
+- Rails-version matrix (7.1/7.2/8.0 gemfiles) when engine code lands (Phase 5).
+- Phase 2 next: Configuration + error hierarchy (branch `phase-2-config-errors`).
+
+**Problems found**
+- Ruby floor: system ruby was EOL 3.1.4; chose >= 3.2 floor (Rails 8's floor)
+  and 3.3.0 for dev. Flag if wider compatibility is wanted.
+- `Naming/FileName` vs hyphenated entry file: excluded in .rubocop.yml
+  (same situation as turbo-rails).
+
 ## 2026-07-18 (later) — Phase 0: parity
 
 **Done**

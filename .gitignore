@@ -1,1 +1,13 @@
 upstream/
+
+# local env files
+.env*
+!.env.test.example
+
+# bundler / build artifacts
+/.bundle/
+/Gemfile.lock
+/pkg/
+/coverage/
+/doc/
+/tmp/
