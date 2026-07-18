@@ -98,16 +98,10 @@ be decided — this is a real TS↔prompt conflict.
 - position: `above|below|sidebar|between`; formats: `banner|clip|native`
 - consent decision: `personalized|basic|custom`; source: `publisher_custom|server_sync|wavebird_dialog` (+ input aliases `publisher`, `custom_dialog`)
 
-## Open questions for Daniele
+## Resolved questions (see docs/DECISIONS.md)
 
-1. **Q1 — error posture conflict** (see Fail-silent section): TS SDK never
-   throws; build prompt demands per-code exceptions. Proposal: low-level
-   `Wavebird::Client` raises typed errors (Ruby-idiomatic, testable); the
-   Rails-facing layer (controller concern/helpers, `create_placement` facade)
-   is fail-silent like upstream. Needs a decision entry either way.
-2. **Q2 = decision #002** — `reportGeneration`: recommend **port** (evidence in
-   table above).
-3. **Q3 — `decisionDelivery: "callback"` mode** (job carries `callback_url`,
-   wavebird POSTs the decision to it): a Rails engine could support this
-   naturally with a mounted callback route. Not in build prompt. Port later /
-   never / v1?
+1. Error posture → **#003 approved: layered** — `Wavebird::Client` raises typed
+   errors; Rails-facing facade is fail-silent like upstream.
+2. `reportGeneration` → **#002 approved: port in v1**.
+3. `decisionDelivery: "callback"` → **#004 approved: later todo**; keep the
+   client design open for it.
