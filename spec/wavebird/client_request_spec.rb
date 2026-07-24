@@ -239,6 +239,67 @@ RSpec.describe Wavebird::Client, "request plumbing" do
     end
   end
 
+  describe "instrumentation" do
+    # Captures every wavebird.request event fired during the block.
+    def capture_events(&block)
+      events = []
+      callback = ->(*args) { events << ActiveSupport::Notifications::Event.new(*args) }
+      ActiveSupport::Notifications.subscribed(callback, "wavebird.request", &block)
+      events
+    end
+
+    it "publishes wavebird.request with method, path and status on success" do
+      stub_request(:get, config_url).to_return(status: 200, body: "{}")
+
+      events = capture_events { client.project_config }
+
+      expect(events.size).to eq(1)
+      expect(events.first.payload).to include(method: "get", path: "/v1/projects/wbproj_spec/config", status: 200)
+    end
+
+    it "measures a non-negative duration" do
+      stub_request(:get, config_url).to_return(status: 200, body: "{}")
+
+      events = capture_events { client.project_config }
+
+      expect(events.first.duration).to be >= 0
+    end
+
+    it "tags the payload with the error class on failure" do
+      stub_request(:get, config_url).to_return(status: 500, body: JSON.generate(error: "boom"))
+
+      events = capture_events do
+        expect { client.project_config }.to raise_error(Wavebird::APIError)
+      end
+
+      expect(events.first.payload).to include(error: "Wavebird::APIError")
+    end
+
+    it "never carries the secret key or asset token in the payload" do
+      stub_request(:post, "#{api_base}/v1/beacons").to_return(status: 204, body: "")
+
+      events = capture_events do
+        client.record_beacon(slot_id: "slot_1", asset_token: "at_secret_proof", event: "rendered")
+      end
+
+      dump = events.map { |event| event.payload.inspect }.join
+      expect(dump).not_to include("at_secret_proof")
+      expect(dump).not_to include("sk_test")
+    end
+
+    # ActiveSupport is loaded in the suite (via railties), so simulate a bare
+    # Ruby install to prove the guard degrades to a plain request that fires no
+    # event.
+    it "still performs the request when ActiveSupport::Notifications is absent" do
+      allow(client).to receive(:notifications_available?).and_return(false)
+      stub_request(:get, config_url).to_return(status: 200, body: JSON.generate({ "ok" => true }))
+
+      events = capture_events { expect(client.project_config[:ok]).to be(true) }
+
+      expect(events).to be_empty
+    end
+  end
+
   describe "defaults" do
     it "uses the global configuration by default" do
       expect(described_class.new.config).to be(Wavebird.configuration)

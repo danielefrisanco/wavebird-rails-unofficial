@@ -12,6 +12,10 @@ require "dotenv"
 Dotenv.load(".env.test")
 
 require "webmock/rspec"
+# Present in any real install via the railties dependency; load it explicitly so
+# specs exercise the client's instrumentation path (build plan §4).
+require "active_support"
+require "active_support/notifications"
 require "wavebird-rails"
 
 WebMock.disable_net_connect!

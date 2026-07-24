@@ -57,6 +57,9 @@ module Wavebird
     BACKOFF_CAP_MS = 2_000
     JITTER_MS = 100
 
+    # Name of the ActiveSupport::Notifications event published per request.
+    INSTRUMENT_EVENT = "wavebird.request"
+
     # @return [Wavebird::Configuration]
     attr_reader :config
 
@@ -284,14 +287,25 @@ module Wavebird
     # -- request plumbing ----------------------------------------------------
 
     def request(method, path, body: nil, query: nil, headers: {}, timeout_ms: config.timeout_ms, auth: true)
-      response = connection.run_request(method, config.api_base_url + path,
-                                        body && JSON.generate(body),
-                                        request_headers(headers, body: body, auth: auth)) do |req|
+      # The payload carries only non-sensitive routing/outcome fields: never the
+      # request body, query, headers, secret_key or asset_token (build prompt
+      # §4). +status+/+error+ are filled in as the request resolves.
+      instrument(method: method.to_s, path: path) do |payload|
+        response = run_request(method, path, body: body, query: query, headers: headers,
+                                             timeout_ms: timeout_ms, auth: auth)
+        payload[:status] = response.status
+        raise_for_status(response, path)
+        response
+      end
+    end
+
+    def run_request(method, path, body:, query:, headers:, timeout_ms:, auth:)
+      connection.run_request(method, config.api_base_url + path,
+                             body && JSON.generate(body),
+                             request_headers(headers, body: body, auth: auth)) do |req|
         req.params.update(query) if query
         req.options.timeout = timeout_ms / 1000.0
       end
-      raise_for_status(response, path)
-      response
     rescue Faraday::TimeoutError
       raise TimeoutError, "Request to #{path} timed out after #{timeout_ms}ms"
     rescue Faraday::ConnectionFailed, Faraday::SSLError => e
@@ -301,6 +315,24 @@ module Wavebird
       raise TimeoutError, "Request to #{path} timed out after #{timeout_ms}ms" if timeout_cause?(e)
 
       raise ConnectionError, "Request to #{path} failed: #{e.message}"
+    end
+
+    # Publishes +wavebird.request+ when ActiveSupport::Notifications is present,
+    # tagging the payload with the raised error class on failure. Degrades to a
+    # plain yield outside Rails so the client works without ActiveSupport.
+    def instrument(payload)
+      return yield(payload) unless notifications_available?
+
+      ActiveSupport::Notifications.instrument(INSTRUMENT_EVENT, payload) do
+        yield payload
+      rescue Error => e
+        payload[:error] = e.class.name
+        raise
+      end
+    end
+
+    def notifications_available?
+      !defined?(ActiveSupport::Notifications).nil?
     end
 
     # @return [Boolean] the transport error was caused by a timeout

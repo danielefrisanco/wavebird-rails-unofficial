@@ -2,6 +2,32 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-24 (later) — Phase 4: close-out (validation, UA, instrumentation)
+
+**Done**
+- Closed the three build-prompt gaps the audit found (none are upstream ports):
+  - `#record_beacon` / `#record_consent` validate their canonical enums
+    locally, raising `ArgumentError` before the request — decision #005.
+    Upstream doesn't validate (unknown beacon types fall back to the legacy
+    wrapper endpoint we don't mirror; it has no consent method at all).
+  - `User-Agent: wavebird-rails/x.y.z` header. Upstream sends no UA.
+  - `ActiveSupport::Notifications` `wavebird.request` event per request,
+    payload `{method, path, status}` (+ `error` class on failure). Guarded via
+    `notifications_available?` so the client still works without ActiveSupport;
+    payload deliberately excludes body/query/headers/secret_key/asset_token.
+- Test env now requires `active_support` + `.../notifications` (present in any
+  real install via railties) so the instrumentation path is exercised; a
+  stubbed `notifications_available?` proves the bare-Ruby no-op path.
+- 224 examples, 100% line + branch, RuboCop clean.
+
+**Problems found**
+- `require "active_support/notifications"` alone raises
+  `uninitialized constant ActiveSupport::IsolatedExecutionState` at
+  instrument time — needs `require "active_support"` first.
+- Phase 7's leak check (grep instrumentation payloads for secrets) is already
+  satisfied for the client: a spec asserts the payload carries neither
+  `sk_test` nor `asset_token`.
+
 ## 2026-07-24 — Phase 4: HTTP client (specs completed)
 
 **Done**
