@@ -33,6 +33,18 @@ module Wavebird
     # Canonical generation lifecycle events (upstream +GenerationEvent+).
     GENERATION_EVENTS = %w[started finished failed].freeze
 
+    # Canonical beacon events (build prompt §3.6). Validated locally: upstream
+    # maps unknown types to +null+ and falls back to the legacy wrapper beacon
+    # endpoint, which this canonical-only client does not mirror — so an
+    # unmapped event has nowhere to go and is rejected before the request.
+    BEACON_EVENTS = %w[rendered visible clicked completed play_started play_completed heartbeat].freeze
+
+    # Canonical consent decisions (build prompt §3.7).
+    CONSENT_DECISIONS = %w[personalized basic custom].freeze
+
+    # Canonical consent sources (build prompt §3.7).
+    CONSENT_SOURCES = %w[publisher_custom server_sync wavebird_dialog].freeze
+
     # Input aliases for consent +source+ accepted but never emitted
     # (build prompt §3.7).
     CONSENT_SOURCE_ALIASES = { "publisher" => "publisher_custom", "custom_dialog" => "publisher_custom" }.freeze
@@ -149,7 +161,10 @@ module Wavebird
     #   stale timestamps (+BEACON_TOO_LATE+), so omit it unless replaying
     # @param metadata [Hash, nil]
     # @return [Types::BeaconResult] 204/empty responses count as accepted
+    # @raise [ArgumentError] for an event outside {BEACON_EVENTS}, raised before
+    #   the request so no asset token reaches the wire on a typo
     def record_beacon(slot_id:, asset_token:, event:, beacon_id: SecureRandom.uuid, occurred_at: nil, metadata: nil)
+      event = validate_enum!(event, BEACON_EVENTS, "event")
       body = compact(beacon_id: beacon_id, slot_id: slot_id, asset_token: asset_token, event: event,
                      occurred_at: iso8601(occurred_at || Time.now), metadata: metadata)
       data = parsed_body(request(:post, "/v1/beacons", body: body))
@@ -169,10 +184,7 @@ module Wavebird
     # @raise [ArgumentError] for an unknown event (it forms the URL path)
     # rubocop:disable Naming/PredicateMethod -- +true+ is a fire-and-forget ack, not a predicate
     def report_generation(job_id, event, generation_id: nil, model_id: nil, usage_json: nil, error: nil)
-      unless GENERATION_EVENTS.include?(event.to_s)
-        raise ArgumentError, "event must be one of #{GENERATION_EVENTS.join('|')}, got #{event.inspect}"
-      end
-
+      event = validate_enum!(event, GENERATION_EVENTS, "event")
       body = compact(generation_id: generation_id, model_id: model_id, usage_json: usage_json, error: error)
       request(:post, "/v1/jobs/#{encode(job_id)}/generation/#{event}", body: body)
       true
@@ -188,9 +200,12 @@ module Wavebird
     # @param purposes [Hash, nil]
     # @param session_id [String, nil]
     # @return [Types::ConsentState]
+    # @raise [ArgumentError] for a decision or source outside the canonical enums
     def record_consent(decision:, source:, purposes: nil, session_id: nil)
+      decision = validate_enum!(decision, CONSENT_DECISIONS, "decision")
+      source = validate_enum!(CONSENT_SOURCE_ALIASES.fetch(source.to_s, source), CONSENT_SOURCES, "source")
       body = compact(client_id: require_client_id, session_id: session_id, decision: decision,
-                     source: CONSENT_SOURCE_ALIASES.fetch(source.to_s, source.to_s), purposes: purposes)
+                     source: source, purposes: purposes)
       Types::ConsentState.from_api(parsed_body(request(:post, "/v1/consent", body: body)) || {})
     end
 
@@ -301,6 +316,7 @@ module Wavebird
     def request_headers(extra, body:, auth:)
       headers = {
         "accept" => "application/json",
+        "user-agent" => config.wrapper_version,
         "x-csl-wrapper-version" => config.wrapper_version
       }
       headers["authorization"] = "Bearer #{require_secret_key}" if auth
@@ -398,6 +414,18 @@ module Wavebird
 
     def compact(hash)
       hash.compact
+    end
+
+    # Rejects values outside a canonical enum before the request is built, so a
+    # typo fails fast locally instead of round-tripping (and, for beacons,
+    # without putting an asset token on the wire).
+    #
+    # @return [String] the value as a canonical string
+    def validate_enum!(value, allowed, name)
+      canonical = value.to_s
+      return canonical if allowed.include?(canonical)
+
+      raise ArgumentError, "#{name} must be one of #{allowed.join('|')}, got #{value.inspect}"
     end
 
     # +wait_ms+ shares the long-poll clamp range (0..5000) from upstream.

@@ -96,6 +96,48 @@ RSpec.describe Wavebird::Client, "beacons, consent and browser activation" do
 
       expect(client.record_beacon(**required).inspect).not_to include("at_secret_proof")
     end
+
+    describe "event validation" do
+      Wavebird::Client::BEACON_EVENTS.each do |event|
+        it "accepts the canonical #{event.inspect} event" do
+          stub = stub_request(:post, beacons_url)
+                 .with(body: hash_including("event" => event))
+                 .to_return(status: 204, body: "")
+
+          client.record_beacon(**required, event: event)
+
+          expect(stub).to have_been_requested
+        end
+      end
+
+      it "accepts a symbol event and emits it canonically" do
+        stub = stub_request(:post, beacons_url)
+               .with(body: hash_including("event" => "clicked"))
+               .to_return(status: 204, body: "")
+
+        client.record_beacon(**required, event: :clicked)
+
+        expect(stub).to have_been_requested
+      end
+
+      # Upstream maps unknown types to null and falls back to the legacy wrapper
+      # beacon endpoint; the canonical-only client has no such fallback, so it
+      # must reject locally rather than emit an unroutable event.
+      it "rejects an unknown event before any request is made" do
+        stub = stub_request(:post, beacons_url)
+
+        expect { client.record_beacon(**required, event: "visible_ended") }
+          .to raise_error(ArgumentError, /event must be one of rendered\|visible\|/)
+        expect(stub).not_to have_been_requested
+      end
+
+      it "does not put the asset token on the wire when the event is invalid" do
+        stub = stub_request(:post, beacons_url)
+
+        expect { client.record_beacon(**required, event: "typo") }.to raise_error(ArgumentError)
+        expect(stub).not_to have_been_requested
+      end
+    end
   end
 
   describe "#record_consent" do
@@ -141,6 +183,36 @@ RSpec.describe Wavebird::Client, "beacons, consent and browser activation" do
       stub_request(:post, consent_url).to_return(status: 204, body: "")
 
       expect(client.record_consent(decision: "basic", source: "server_sync").decision).to be_nil
+    end
+
+    describe "enum validation" do
+      Wavebird::Client::CONSENT_DECISIONS.each do |decision|
+        it "accepts the canonical #{decision.inspect} decision" do
+          stub = stub_request(:post, consent_url)
+                 .with(body: hash_including("decision" => decision))
+                 .to_return(status: 204, body: "")
+
+          client.record_consent(decision: decision, source: "server_sync")
+
+          expect(stub).to have_been_requested
+        end
+      end
+
+      it "rejects an unknown decision before any request is made" do
+        stub = stub_request(:post, consent_url)
+
+        expect { client.record_consent(decision: "everything", source: "server_sync") }
+          .to raise_error(ArgumentError, /decision must be one of personalized\|basic\|custom/)
+        expect(stub).not_to have_been_requested
+      end
+
+      it "rejects an unknown source before any request is made" do
+        stub = stub_request(:post, consent_url)
+
+        expect { client.record_consent(decision: "basic", source: "carrier_pigeon") }
+          .to raise_error(ArgumentError, /source must be one of publisher_custom\|/)
+        expect(stub).not_to have_been_requested
+      end
     end
   end
 

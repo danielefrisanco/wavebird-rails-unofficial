@@ -7,10 +7,11 @@ RSpec.describe Wavebird::Client, "request plumbing" do
   let(:config_url) { "#{api_base}/v1/projects/wbproj_spec/config" }
 
   describe "request headers" do
-    it "sends bearer auth, accept and the wrapper version header" do
+    it "sends bearer auth, accept, user agent and the wrapper version header" do
       stub = stub_request(:get, config_url)
              .with(headers: { "Authorization" => "Bearer sk_test_spec_placeholder",
                               "Accept" => "application/json",
+                              "User-Agent" => "wavebird-rails/#{Wavebird::VERSION}",
                               "X-Csl-Wrapper-Version" => "wavebird-rails/#{Wavebird::VERSION}" })
              .to_return(status: 200, body: "{}")
 
