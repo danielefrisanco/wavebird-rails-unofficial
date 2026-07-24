@@ -34,6 +34,11 @@ module Wavebird
     # @return [String, nil] the wavebird project client id (wbproj_...)
     attr_accessor :client_id
 
+    # @return [String, #call, nil] publishable browser key (pk_...) used only
+    #   by {Client#activate_browser} (Script Tag / browser flows, secondary);
+    #   safe for browsers by design, unlike +secret_key+
+    attr_accessor :publishable_key
+
     # @return [Hash, nil] default +slot_hint+ merged into placement requests
     attr_accessor :default_slot_hint
 
@@ -62,6 +67,7 @@ module Wavebird
     def initialize
       @secret_key = nil
       @client_id = nil
+      @publishable_key = nil
       @api_base_url = DEFAULT_API_BASE_URL
       @default_slot_hint = nil
       @default_overrides = nil

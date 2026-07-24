@@ -2,6 +2,40 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-24 — Phase 4: HTTP client (specs completed)
+
+**Done**
+- Branch `phase-4-client`: `Wavebird::Client` covers all nine canonical v1
+  endpoints (`create_placement`, `create_job`, `decision`, `await_decision`,
+  `record_beacon`, `report_generation`, `record_consent`, `activate_browser`,
+  `project_config`) plus `DecisionNormalizer`.
+- Added the missing endpoint specs: decisions + polling ladder
+  (`client_decisions_spec`), beacons/consent/browser activation
+  (`client_beacons_spec`), and `#project_config`'s own guards.
+- 204 examples, 100% line + branch coverage, RuboCop clean.
+- `.rubocop.yml` widened with documented reasons: Metrics exclusions for
+  `client.rb`/`decision_normalizer.rb` (they port upstream validation branch
+  for branch), `CountKeywordArgs: false` (endpoint methods take the request
+  contract as kwargs), `RSpec/DescribeMethod` off (client specs are grouped by
+  endpoint, not method).
+
+**Todo**
+- Phase 5 next: the fail-silent Rails-facing facade (decision #003) + engine.
+- README: document `data_redactor` as an optional integration — see TODO.md
+  (docs only, deliberately not a gemspec dependency).
+
+**Problems found**
+- **Real bug caught by a spec:** connect-phase timeouts arrive as
+  `Faraday::ConnectionFailed` wrapping `Net::OpenTimeout`, not
+  `Faraday::TimeoutError`, so every connect timeout was misclassified as
+  `ConnectionError`. Since `TimeoutError` and `ConnectionError` are different
+  branches of the public hierarchy (and the Phase 5 facade will likely treat
+  timeouts as retryable), this mattered. Fixed by inspecting the wrapped cause
+  (`timeout_cause?`); upstream treats any timed-out request as a timeout.
+- Backoff is monotonic only until `BACKOFF_CAP_MS`; past the cap jitter makes
+  successive waits wobble around it. First assertion asserted global
+  monotonicity and was wrong — the client was correct.
+
 ## 2026-07-18 (night) — Phase 3: value objects
 
 **Done**

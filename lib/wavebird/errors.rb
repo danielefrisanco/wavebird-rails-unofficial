@@ -37,6 +37,17 @@ module Wavebird
   # The HTTP request timed out.
   class TimeoutError < ConnectionError; end
 
+  # The response violated the API contract (invalid JSON, oversized body, or a
+  # decision/job payload failing the normalization rules ported from the
+  # upstream SDK's +sdk_invalid_*_response+ / parse errors).
+  class InvalidResponseError < Error; end
+
+  # {Client#await_decision} exhausted the +decision_timeout_ms+ polling budget
+  # (upstream +sdk_decision_timeout+; upstream returns a pending fallback —
+  # the raise-y low-level client raises instead, per decision #003, and the
+  # fail-silent facade converts it back to a pending outcome).
+  class DecisionTimeoutError < Error; end
+
   # API returned an error envelope with an unrecognized code (fallback class).
   class APIError < Error; end
 
