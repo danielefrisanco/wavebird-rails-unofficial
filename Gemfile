@@ -6,6 +6,7 @@ gemspec
 
 group :development, :test do
   gem "dotenv", "~> 3.1"
+  gem "rack-test", "~> 2.1"
   gem "rake", "~> 13.2"
   gem "rspec", "~> 3.13"
   gem "rubocop", "~> 1.75", require: false

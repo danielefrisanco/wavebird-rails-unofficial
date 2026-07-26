@@ -2,6 +2,49 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-26 — Phase 5: Rails engine, fail-silent facade, helpers (blocking path)
+
+**Done**
+- Branch `phase-5-engine`. Fail-silent `Wavebird::Facade` (decision #003) wraps
+  `Client`: `create_placement`/`record_beacon` catch `Wavebird::Error`, report
+  through the same `on_error`/logger channel the polling ladder uses, and return
+  a synthetic no-fill / `nil` so an ad failure never breaks the host flow.
+  `Wavebird.client` is the facade — the fail-silent layer is the public default.
+- `Wavebird::Engine < ::Rails::Engine` (isolated namespace) + `config/routes.rb`
+  → `POST /wavebird/sponsor_slot`. Loaded from `wavebird-rails.rb` only when
+  Rails is present, so `require "wavebird"` stays a client-only path.
+- `Wavebird::SponsorSlotsController`: calls the facade server-side, returns
+  browser-safe JSON only. **Secret key never in the response** (asserted in a
+  spec); no-fill and any swallowed error both → `{ fill: false }` with 200. The
+  user's raw prompt is deliberately not accepted as a param (privacy §4).
+- `Wavebird::SlotHelper` (`wavebird_render_script_tag` emitted once/page,
+  `wavebird_slot` → hidden `<section>` + Stimulus hook — decision #006) and
+  `Wavebird::SessionId` concern (anonymous `sess_` id in the session).
+- Test harness: a minimal in-memory `Rails::Application` mounts the engine and
+  is driven with `rack-test` (new dev dep) — real request specs without a
+  `spec/dummy` app or `rspec-rails` (those arrive with Phase 8's Capybara).
+- 261 examples, 100% line + branch, RuboCop clean.
+
+**Todo**
+- Phase 6: Stimulus controller + async mode (`create_job` → `DecisionPollJob` →
+  Turbo **Stream** broadcast into the slot `<section>`). Blocking path is done;
+  async was scoped to Phase 6 with its browser half (Daniele's call).
+- README: `data_redactor` optional integration + keep `prompt` caller-
+  transformable (parked in TODO.md).
+
+**Problems found**
+- **Ruby/Rails version reality (decision #007):** Rails 8.1.3's `actionview`
+  uses Ruby 3.4+ syntax and won't parse on Ruby 3.3.0; earlier phases passed
+  only because they never loaded actionview. Resolved by moving to Ruby 3.4.10.
+- Isolated engine developed in-place: the test app shared the gem's
+  `config/routes.rb`, drawing the engine's route twice (`Invalid route name`).
+  Fixed by giving the test app its own throwaway `config.root` (a tmpdir).
+- Rails 8.1 `HostAuthorization` blocked rack-test's `example.org` host (403) →
+  `config.hosts.clear` in the test app.
+- WebMock does not match a query-bearing request (`?wait_ms=1500`) against a
+  bare stub URL; controller specs stub via `.with(query: hash_including({}))`,
+  same idiom the decision specs already use.
+
 ## 2026-07-24 (later) — Phase 4: close-out (validation, UA, instrumentation)
 
 **Done**

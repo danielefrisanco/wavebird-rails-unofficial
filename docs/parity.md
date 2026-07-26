@@ -34,12 +34,14 @@ on failure; `getDecision` resolves to a no-fill fallback; `sendBeacon` resolves
 `{accepted:false}`-shaped fallback; `reportGeneration` returns void. All
 failures are routed to `onError` as structured `WavebirdSdkError`s.
 
-→ Ruby port: same posture on the *placement path* (`create_job`, `decision`
-never raise in the request path; errors go to `on_error` + logger). **Open
-question for Daniele (Q1):** the build prompt §3.9 instead demands distinct
-raised exceptions per HTTP error code. Both can coexist (raise-y low-level
-`Client`, fail-silent high-level facade), but which is the public default must
-be decided — this is a real TS↔prompt conflict.
+→ Ruby port: **resolved (decision #003), both coexist and are built.** The
+low-level `Wavebird::Client` raises distinct typed exceptions per HTTP error
+code (build prompt §3.9); the high-level `Wavebird::Facade` — returned by
+`Wavebird.client`, the public default — is fail-silent like upstream: it
+catches `Wavebird::Error`, reports through `on_error` + logger, and returns a
+no-fill outcome so the host flow is never broken. The engine's
+`SponsorSlotsController` uses the facade, so a wavebird failure surfaces to the
+browser as `{ fill: false }` with 200.
 
 ## Client methods
 
@@ -86,7 +88,7 @@ be decided — this is a real TS↔prompt conflict.
 
 | npm subpath | Ruby | Decision |
 |---|---|---|
-| `./react` (`WavebirdAd`), `./mount` | Turbo Frame + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) | adapt — per build prompt §2 and wavebird's own API-first guidance |
+| `./react` (`WavebirdAd`), `./mount` | plain hidden `<section>` + Stimulus hook + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) — **not** a Turbo Frame (decision #006): the renderer owns the element via `replaceChildren`/`hidden`, so Stimulus decorates it and async mode reveals it via Turbo Streams | adapt — per build prompt §2 and wavebird's own API-first guidance |
 | `./browser` (browser client) | not ported | skip — Script Tag covers browsers |
 | `./consent`, `./consent/react` (dialog, TCF strings, consent store) | `#record_consent` API only; host app CMP supplies UI | adapt (v1) — TCF string support = later todo |
 
