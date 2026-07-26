@@ -8,13 +8,13 @@ audit phase at the end.
 
 ---
 
-## Phase 0 — Pin the upstream contract (verification baseline)
+## Phase 0 — Pin the upstream contract (verification baseline) — **done**
 
-- [ ] Fetch and snapshot the canonical sources into `docs/upstream/` (date-stamped):
+- [x] Fetch and snapshot the canonical sources into `docs/upstream/` (date-stamped):
   - `https://wavebird.ai/wavebird-api-llm-integration.md` (integration brief)
   - `https://wavebird.ai/api/reference/types`, `/errors`, `/rate-limits`
   - `https://github.com/wavebird-ai/wavebird` → `src/index.ts`, `src/public_contracts.ts`
-- [ ] Build a **parity table** (`docs/parity.md`): every TS SDK export ↔ planned Ruby
+- [x] Build a **parity table** (`docs/parity.md`): every TS SDK export ↔ planned Ruby
   equivalent ↔ decision (port / adapt / intentionally skip + why). Known rows:
   | TS SDK | Ruby | Decision |
   |---|---|---|
@@ -22,83 +22,87 @@ audit phase at the end.
   | `createJob()` | `#create_job` | port |
   | `getDecision()` | `#decision(slot_id)` | port |
   | `sendBeacon()` | `#record_beacon` | port (documented as advanced/optional) |
-  | `reportGeneration()` | **TBD** — present in TS SDK, absent from build prompt; check docs, decide port/skip | investigate |
-  | `getDecisionViaWebSocket()` (WS to wavebird API) | ActiveJob poll + Turbo Stream broadcast instead | adapt — Rails-native async delivery; direct WS to wavebird deferred to v2 |
+  | `reportGeneration()` | `#report_generation` | **resolved: port in v1** (decision #002) |
+  | `getDecisionViaWebSocket()` (WS to wavebird API) | ActiveJob poll + Turbo Stream broadcast instead | adapt (decision #001) — Rails-native async delivery; direct WS to wavebird **deferred to v2** |
   | `public_contracts.ts` types | `Wavebird` value objects | port field-for-field |
-  | `WavebirdAd` React / `mountWavebirdAd` | Turbo Frame + hosted renderer | intentionally not ported |
+  | `WavebirdAd` React / `mountWavebirdAd` | slot `<section>` + Stimulus + hosted renderer (decision #006) | intentionally not ported |
   | `ConsentDialog` | `#record_consent` API only | intentionally not ported (v1) |
 - [ ] Re-check `https://wavebird.ai/api/changelog` + `/api/reference/versioning`
   (prompt data was pulled 2026-07-18 — same day, but confirm).
 
 **Gate:** parity table complete; every skipped TS feature has a written rationale.
 
-## Phase 1 — Gem skeleton & tooling
+## Phase 1 — Gem skeleton & tooling — **done**
 
-- [ ] `bundle gem wavebird-rails` layout: `wavebird-rails.gemspec`, `lib/wavebird.rb`,
+- [x] `bundle gem wavebird-rails` layout: `wavebird-rails.gemspec`, `lib/wavebird.rb`,
   `lib/wavebird/version.rb`, MIT `LICENSE`, `CHANGELOG.md` (Keep a Changelog), `.gitignore`.
-- [ ] Gemspec: runtime deps `faraday` (~> 2), `rails` (>= 7.0 for Hotwire defaults);
-  `required_ruby_version >= 3.1`; `homepage`/`source_code_uri` → this repo;
+- [x] Gemspec: runtime deps `faraday` (~> 2), `railties` (>= 7.1, < 9);
+  `required_ruby_version >= 3.2`; `homepage`/`source_code_uri` → this repo;
   `rubygems_mfa_required = "true"` in metadata.
-- [ ] Dev tooling: RSpec, WebMock, SimpleCov (min coverage enforced), RuboCop
+- [x] Dev tooling: RSpec, WebMock, SimpleCov (min coverage enforced), RuboCop
   (standard style, `.rubocop.yml` committed), `rake` default task = spec + rubocop.
-- [ ] GitHub Actions CI: matrix over supported Ruby (3.1–3.3) × Rails (7.1, 7.2, 8.0)
-  via `appraisal` or gemfiles; runs rspec + rubocop.
+- [ ] GitHub Actions CI: matrix over supported Ruby × Rails (7.1, 7.2, 8.0) via
+  `appraisal` or gemfiles; runs rspec + rubocop. **Dev is now on Ruby 3.4.10 +
+  Rails 8.1 (decision #007)**; the CI Ruby floor will be pinned when the matrix
+  lands (Phase 8) — the gem still declares `>= 3.2` for consumers on older Rails.
 
 **Gate:** `bundle exec rake` green on empty skeleton; CI runs.
 
-## Phase 2 — Configuration + error hierarchy
+## Phase 2 — Configuration + error hierarchy — **done**
 
-- [ ] `Wavebird::Configuration`: `secret_key`, `client_id`,
+- [x] `Wavebird::Configuration`: `secret_key`, `client_id`,
   `api_base_url` (default `https://api.wavebird.ai`), `default_slot_hint`,
   `default_overrides`, `timeout`/`open_timeout`, `logger`. `Wavebird.configure` block +
   `Wavebird.client` memoized accessor; raise `Wavebird::ConfigurationError` on first
   use with blank `secret_key` (not at boot — per prompt §6).
-- [ ] `Wavebird::Errors` per §3.9: `Wavebird::Error` base exposing `request_id`,
+- [x] `Wavebird::Errors` per §3.9: `Wavebird::Error` base exposing `request_id`,
   `code`, `docs_url`, `http_status`; subclasses `UnauthorizedError`, `ForbiddenError`,
   `RateLimitedError` (with `retry_after`), `ValidationError` (with field paths),
   `NotFoundError`, plus `APIError` fallback for unknown codes and
   `ConnectionError`/`TimeoutError` for transport failures.
-- [ ] `secret_key` redacted from `Configuration#inspect` / logging.
+- [x] `secret_key` redacted from `Configuration#inspect` / logging.
 
 **Tests:** config defaults, blank-key raise, every error class carries `request_id`.
 
-## Phase 3 — Value objects (`types.rb`)
+## Phase 3 — Value objects (`types.rb`) — **done**
 
-- [ ] `Data`/`Struct` value objects mirroring `public_contracts.ts` field names exactly:
+- [x] `Data`/`Struct` value objects mirroring `public_contracts.ts` field names exactly:
   `Placement` (incl. nested `Render` with `strategy`, `frame_url`, `script_url`),
   `Decision` (`fill`, `format`, `asset_token`, `assets`), `PlacementResponse`
   (`slot_id`, `status`, `placement` may be nil, `decision`), `BeaconResult`,
   `ConsentState`, `ProjectConfig`.
-- [ ] Tolerant deserialization: unknown response fields ignored (esp. beacons — §3.6),
+- [x] Tolerant deserialization: unknown response fields ignored (esp. beacons — §3.6),
   accessible via a raw-attributes reader; never raise on missing optional fields.
-- [ ] Convenience: `PlacementResponse#fill?` (true only when placement present AND
+- [x] Convenience: `PlacementResponse#fill?` (true only when placement present AND
   `decision.fill`), `#no_fill?` — no-fill is a first-class success state.
-- [ ] `asset_token` redacted in `#inspect`/`#to_s` of every object carrying it (§4).
+- [x] `asset_token` redacted in `#inspect`/`#to_s` of every object carrying it (§4).
 
 **Tests:** round-trip from the exact JSON fixtures in §3.1; nil placement; unknown
 fields tolerated; `inspect` never leaks `asset_token`.
 
-## Phase 4 — HTTP client, endpoint by endpoint
+## Phase 4 — HTTP client, endpoint by endpoint — **done**
 
 Build on Faraday with WebMock-stubbed tests per endpoint before moving to the next:
 
-- [ ] Shared plumbing: `Authorization: Bearer`, JSON encode/decode, `User-Agent:
+- [x] Shared plumbing: `Authorization: Bearer`, JSON encode/decode, `User-Agent:
   wavebird-rails/x.y.z`, error-envelope → exception mapping, `X-Request-Id` capture,
   timeouts, never send `production_dry_run`/`billing_suppressed`/etc. (response-only
   fields, §3). No retry-on-failure by default for placements (latency-sensitive).
-- [ ] 4.1 `#create_placement(session_id:, job_type: "chat", slots_requested: 1,
+- [x] 4.1 `#create_placement(session_id:, job_type: "chat", slots_requested: 1,
   slot_hint:, overrides:, consent:, wait_ms: 1500)` — keyword-args-only, so there is
   no slot for prompts/PII to sneak in (§4); merges configured defaults.
-- [ ] 4.2 `#create_job(...)` — parity route, documented as advanced.
-- [ ] 4.3 `#decision(slot_id)` — poll after `/v1/jobs` or placement timeout.
-- [ ] 4.4 `#record_beacon(beacon_id:, slot_id:, asset_token:, event:, metadata: nil)` —
+- [x] 4.2 `#create_job(...)` — parity route, documented as advanced.
+- [x] 4.3 `#decision(slot_id)` — poll after `/v1/jobs` or placement timeout.
+  (Also `#await_decision` — the full polling ladder, decision #001.)
+- [x] 4.4 `#record_beacon(beacon_id:, slot_id:, asset_token:, event:, metadata: nil)` —
   generates `occurred_at` **at call time** internally (prevents `BEACON_TOO_LATE`);
-  validates `event` against the seven allowed values; documented as escape hatch.
-- [ ] 4.5 `#record_consent(session_id:, decision:, source:, purposes:)` — validate
-  enums; accept alias sources (`publisher`, `custom_dialog`) but emit only canonical.
-- [ ] 4.6 `#activate_browser(publishable_key:, origin:)` — secondary, marked as such.
-- [ ] 4.7 `#project_config` — GET config.
-- [ ] Instrumentation: `ActiveSupport::Notifications` (`wavebird.request`) with
+  validates `event` against the seven allowed values (decision #005); documented as escape hatch.
+- [x] 4.5 `#record_consent(session_id:, decision:, source:, purposes:)` — validate
+  enums (decision #005); accept alias sources (`publisher`, `custom_dialog`) but emit only canonical.
+- [x] 4.6 `#activate_browser(publishable_key:, origin:)` — secondary, marked as such.
+- [x] 4.7 `#project_config` — GET config.
+- [x] Also `#report_generation` (decision #002, port in v1).
+- [x] Instrumentation: `ActiveSupport::Notifications` (`wavebird.request`) with
   `asset_token` and `secret_key` scrubbed from payloads.
 
 **Tests (per §6):** fill success; `fill: false` + `placement: null` returns normally
@@ -108,38 +112,52 @@ duplicate beacon (`duplicate: true`) is not an error; `BEACON_TOO_LATE` →
 
 ## Phase 5 — Rails engine: routes, controller, helpers
 
-- [ ] `Wavebird::Engine < ::Rails::Engine` (isolated namespace) +
+Blocking path **done** (branch `phase-5-engine`); async delivery mode moved to
+Phase 6 with its browser half (Daniele's call). Dev toolchain moved to Ruby
+3.4.10 + Rails 8.1 here — decision #007.
+
+- [x] `Wavebird::Facade` (fail-silent, decision #003) + `Wavebird.client`
+  returning it — wraps the raising `Client`, catches `Wavebird::Error`, reports
+  via `on_error`/logger, returns a no-fill/`nil`.
+- [x] `Wavebird::Engine < ::Rails::Engine` (isolated namespace) +
   `config/routes.rb` mounting `POST /wavebird/sponsor_slot`.
-- [ ] `Wavebird::SponsorSlotsController`: calls `create_placement` server-side,
+- [x] `Wavebird::SponsorSlotsController`: calls the facade server-side,
   returns only browser-safe JSON (frame_url, script_url, dimensions, fill flag —
   **never** secret_key; asset_token only insofar as the hosted renderer needs it via
   `frame_url`); no-fill → `{ fill: false }` with 200; API errors → `{ fill: false }`
   too (host chat flow must be unaffected, §4).
-- [ ] `Wavebird::SlotHelper`: `wavebird_render_script_tag` (emits `/v1/render.js`
+- [x] `Wavebird::SlotHelper`: `wavebird_render_script_tag` (emits `/v1/render.js`
   script tag once per page), `wavebird_slot(session_id:, endpoint:, **opts)` →
-  hidden Turbo Frame + data attributes for the Stimulus controller, matching the
-  integration brief's plain-HTML example semantically.
-- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`):**
+  hidden **plain `<section>` + Stimulus hook** (decision #006 — *not* a Turbo
+  Frame: the hosted renderer owns the element via `replaceChildren`/`hidden`, so
+  Stimulus decorates it; async mode reveals it via Turbo **Streams**), matching
+  the integration brief's plain-HTML example semantically.
+- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
+  Phase 6 (needs the Stimulus/Turbo-Stream browser half to be testable):
   controller calls `#create_job` (non-blocking, zero added chat latency) →
   `Wavebird::DecisionPollJob` (ActiveJob, SolidQueue-compatible) polls
   `GET /v1/decisions/{slot_id}` with `wait_ms` long-poll → on decision,
-  `Turbo::StreamsChannel.broadcast_*` fills/hides the slot frame. Blocking
+  `Turbo::StreamsChannel.broadcast_*` reveals/hides the slot `<section>`. Blocking
   `wait_ms` placements flow stays the simple default (matches wavebird's
   recommended Server API pattern); async mode is the showcase.
   (Direct WebSocket to wavebird's API — TS SDK `getDecisionViaWebSocket` —
   stays out of v1; parity table documents the rationale.)
-- [ ] Session id helper/concern: generate + store anonymous `session[:wavebird_session_id]`.
+- [x] Session id helper/concern: generate + store anonymous `session[:wavebird_session_id]`.
 
-**Tests:** request specs — response JSON never contains secret_key (explicit
-assertion, acceptance §5); no-fill and error paths return 200 hide-slot payloads;
-helper output markup (script tag emitted once, frame attributes correct).
+**Tests (done):** request specs against a minimal in-memory Rails app via
+rack-test (no `spec/dummy`/`rspec-rails` yet — those arrive in Phase 8) —
+response JSON never contains secret_key (explicit assertion, acceptance §5);
+no-fill and error paths return 200 hide-slot payloads; helper output markup
+(script tag emitted once, section attributes correct). 261 examples, 100% line
++ branch, RuboCop clean.
 
 ## Phase 6 — Stimulus controller (hosted renderer glue)
 
 - [ ] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
   once (idempotent), wraps `window.wavebird.withTurn()` around the chat turn, POSTs
-  to the engine endpoint, sets Turbo Frame `src`/reveals on fill, keeps hidden on
-  no-fill; degrades silently if render.js fails to load.
+  to the engine endpoint, reveals the slot `<section>` on fill (the hosted
+  renderer mounts the iframe), keeps it hidden on no-fill; degrades silently if
+  render.js fails to load.
 - [ ] Verify lifecycle semantics against the **actual hosted render.js** (fetched
   live 2026-07-18; exposes `withTurn`, `startTurn`, `clearPlacement`) — behavior
   parity, not code translation. Keep the snapshot in `docs/upstream/` for diffing.
@@ -162,7 +180,7 @@ helper output markup (script tag emitted once, frame attributes correct).
 ## Phase 8 — System tests (dummy app + Capybara)
 
 - [ ] Minimal dummy Rails app under `spec/dummy/` with a chat page using the helpers.
-- [ ] Capybara + mocked `/v1/placements`: fill → Turbo Frame renders; no-fill →
+- [ ] Capybara + mocked `/v1/placements`: fill → slot section revealed; no-fill →
   frame stays hidden and chat flow proceeds; wavebird API down → chat unaffected.
 - [ ] Async mode: mocked `/v1/jobs` + `/v1/decisions/{slot_id}` → job runs →
   Turbo Stream broadcast fills the slot; no-fill broadcast removes it; job

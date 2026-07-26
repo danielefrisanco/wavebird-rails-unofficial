@@ -6,6 +6,7 @@ require_relative "wavebird/configuration"
 require_relative "wavebird/types"
 require_relative "wavebird/decision_normalizer"
 require_relative "wavebird/client"
+require_relative "wavebird/facade"
 
 # Rails client and Hotwire integration for the wavebird Compute Sponsoring API
 # (https://wavebird.ai). Ported from the original public wavebird TypeScript
@@ -32,11 +33,23 @@ module Wavebird
       configuration
     end
 
+    # The public, fail-silent client (parity with the upstream SDK: a failed
+    # sponsor slot never breaks the host flow — decision #003). Memoized against
+    # the global configuration; reset by {reset_configuration!}.
+    #
+    # For typed exceptions instead, instantiate {Wavebird::Client} directly.
+    #
+    # @return [Wavebird::Facade]
+    def client
+      @client ||= Facade.new(config: configuration)
+    end
+
     # Resets the global configuration (used by tests).
     #
     # @return [void]
     def reset_configuration!
       @configuration = nil
+      @client = nil
     end
   end
 end
