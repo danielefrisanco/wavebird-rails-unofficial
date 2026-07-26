@@ -25,7 +25,7 @@ audit phase at the end.
   | `reportGeneration()` | **TBD** — present in TS SDK, absent from build prompt; check docs, decide port/skip | investigate |
   | `getDecisionViaWebSocket()` (WS to wavebird API) | ActiveJob poll + Turbo Stream broadcast instead | adapt — Rails-native async delivery; direct WS to wavebird deferred to v2 |
   | `public_contracts.ts` types | `Wavebird` value objects | port field-for-field |
-  | `WavebirdAd` React / `mountWavebirdAd` | Turbo Frame + hosted renderer | intentionally not ported |
+  | `WavebirdAd` React / `mountWavebirdAd` | slot `<section>` + Stimulus + hosted renderer (decision #006) | intentionally not ported |
   | `ConsentDialog` | `#record_consent` API only | intentionally not ported (v1) |
 - [ ] Re-check `https://wavebird.ai/api/changelog` + `/api/reference/versioning`
   (prompt data was pulled 2026-07-18 — same day, but confirm).
@@ -108,38 +108,52 @@ duplicate beacon (`duplicate: true`) is not an error; `BEACON_TOO_LATE` →
 
 ## Phase 5 — Rails engine: routes, controller, helpers
 
-- [ ] `Wavebird::Engine < ::Rails::Engine` (isolated namespace) +
+Blocking path **done** (branch `phase-5-engine`); async delivery mode moved to
+Phase 6 with its browser half (Daniele's call). Dev toolchain moved to Ruby
+3.4.10 + Rails 8.1 here — decision #007.
+
+- [x] `Wavebird::Facade` (fail-silent, decision #003) + `Wavebird.client`
+  returning it — wraps the raising `Client`, catches `Wavebird::Error`, reports
+  via `on_error`/logger, returns a no-fill/`nil`.
+- [x] `Wavebird::Engine < ::Rails::Engine` (isolated namespace) +
   `config/routes.rb` mounting `POST /wavebird/sponsor_slot`.
-- [ ] `Wavebird::SponsorSlotsController`: calls `create_placement` server-side,
+- [x] `Wavebird::SponsorSlotsController`: calls the facade server-side,
   returns only browser-safe JSON (frame_url, script_url, dimensions, fill flag —
   **never** secret_key; asset_token only insofar as the hosted renderer needs it via
   `frame_url`); no-fill → `{ fill: false }` with 200; API errors → `{ fill: false }`
   too (host chat flow must be unaffected, §4).
-- [ ] `Wavebird::SlotHelper`: `wavebird_render_script_tag` (emits `/v1/render.js`
+- [x] `Wavebird::SlotHelper`: `wavebird_render_script_tag` (emits `/v1/render.js`
   script tag once per page), `wavebird_slot(session_id:, endpoint:, **opts)` →
-  hidden Turbo Frame + data attributes for the Stimulus controller, matching the
-  integration brief's plain-HTML example semantically.
-- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`):**
+  hidden **plain `<section>` + Stimulus hook** (decision #006 — *not* a Turbo
+  Frame: the hosted renderer owns the element via `replaceChildren`/`hidden`, so
+  Stimulus decorates it; async mode reveals it via Turbo **Streams**), matching
+  the integration brief's plain-HTML example semantically.
+- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
+  Phase 6 (needs the Stimulus/Turbo-Stream browser half to be testable):
   controller calls `#create_job` (non-blocking, zero added chat latency) →
   `Wavebird::DecisionPollJob` (ActiveJob, SolidQueue-compatible) polls
   `GET /v1/decisions/{slot_id}` with `wait_ms` long-poll → on decision,
-  `Turbo::StreamsChannel.broadcast_*` fills/hides the slot frame. Blocking
+  `Turbo::StreamsChannel.broadcast_*` reveals/hides the slot `<section>`. Blocking
   `wait_ms` placements flow stays the simple default (matches wavebird's
   recommended Server API pattern); async mode is the showcase.
   (Direct WebSocket to wavebird's API — TS SDK `getDecisionViaWebSocket` —
   stays out of v1; parity table documents the rationale.)
-- [ ] Session id helper/concern: generate + store anonymous `session[:wavebird_session_id]`.
+- [x] Session id helper/concern: generate + store anonymous `session[:wavebird_session_id]`.
 
-**Tests:** request specs — response JSON never contains secret_key (explicit
-assertion, acceptance §5); no-fill and error paths return 200 hide-slot payloads;
-helper output markup (script tag emitted once, frame attributes correct).
+**Tests (done):** request specs against a minimal in-memory Rails app via
+rack-test (no `spec/dummy`/`rspec-rails` yet — those arrive in Phase 8) —
+response JSON never contains secret_key (explicit assertion, acceptance §5);
+no-fill and error paths return 200 hide-slot payloads; helper output markup
+(script tag emitted once, section attributes correct). 261 examples, 100% line
++ branch, RuboCop clean.
 
 ## Phase 6 — Stimulus controller (hosted renderer glue)
 
 - [ ] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
   once (idempotent), wraps `window.wavebird.withTurn()` around the chat turn, POSTs
-  to the engine endpoint, sets Turbo Frame `src`/reveals on fill, keeps hidden on
-  no-fill; degrades silently if render.js fails to load.
+  to the engine endpoint, reveals the slot `<section>` on fill (the hosted
+  renderer mounts the iframe), keeps it hidden on no-fill; degrades silently if
+  render.js fails to load.
 - [ ] Verify lifecycle semantics against the **actual hosted render.js** (fetched
   live 2026-07-18; exposes `withTurn`, `startTurn`, `clearPlacement`) — behavior
   parity, not code translation. Keep the snapshot in `docs/upstream/` for diffing.
@@ -162,7 +176,7 @@ helper output markup (script tag emitted once, frame attributes correct).
 ## Phase 8 — System tests (dummy app + Capybara)
 
 - [ ] Minimal dummy Rails app under `spec/dummy/` with a chat page using the helpers.
-- [ ] Capybara + mocked `/v1/placements`: fill → Turbo Frame renders; no-fill →
+- [ ] Capybara + mocked `/v1/placements`: fill → slot section revealed; no-fill →
   frame stays hidden and chat flow proceeds; wavebird API down → chat unaffected.
 - [ ] Async mode: mocked `/v1/jobs` + `/v1/decisions/{slot_id}` → job runs →
   Turbo Stream broadcast fills the slot; no-fill broadcast removes it; job
