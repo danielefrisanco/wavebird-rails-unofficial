@@ -2,6 +2,66 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-24 (later) — Phase 4: close-out (validation, UA, instrumentation)
+
+**Done**
+- Closed the three build-prompt gaps the audit found (none are upstream ports):
+  - `#record_beacon` / `#record_consent` validate their canonical enums
+    locally, raising `ArgumentError` before the request — decision #005.
+    Upstream doesn't validate (unknown beacon types fall back to the legacy
+    wrapper endpoint we don't mirror; it has no consent method at all).
+  - `User-Agent: wavebird-rails/x.y.z` header. Upstream sends no UA.
+  - `ActiveSupport::Notifications` `wavebird.request` event per request,
+    payload `{method, path, status}` (+ `error` class on failure). Guarded via
+    `notifications_available?` so the client still works without ActiveSupport;
+    payload deliberately excludes body/query/headers/secret_key/asset_token.
+- Test env now requires `active_support` + `.../notifications` (present in any
+  real install via railties) so the instrumentation path is exercised; a
+  stubbed `notifications_available?` proves the bare-Ruby no-op path.
+- 224 examples, 100% line + branch, RuboCop clean.
+
+**Problems found**
+- `require "active_support/notifications"` alone raises
+  `uninitialized constant ActiveSupport::IsolatedExecutionState` at
+  instrument time — needs `require "active_support"` first.
+- Phase 7's leak check (grep instrumentation payloads for secrets) is already
+  satisfied for the client: a spec asserts the payload carries neither
+  `sk_test` nor `asset_token`.
+
+## 2026-07-24 — Phase 4: HTTP client (specs completed)
+
+**Done**
+- Branch `phase-4-client`: `Wavebird::Client` covers all nine canonical v1
+  endpoints (`create_placement`, `create_job`, `decision`, `await_decision`,
+  `record_beacon`, `report_generation`, `record_consent`, `activate_browser`,
+  `project_config`) plus `DecisionNormalizer`.
+- Added the missing endpoint specs: decisions + polling ladder
+  (`client_decisions_spec`), beacons/consent/browser activation
+  (`client_beacons_spec`), and `#project_config`'s own guards.
+- 204 examples, 100% line + branch coverage, RuboCop clean.
+- `.rubocop.yml` widened with documented reasons: Metrics exclusions for
+  `client.rb`/`decision_normalizer.rb` (they port upstream validation branch
+  for branch), `CountKeywordArgs: false` (endpoint methods take the request
+  contract as kwargs), `RSpec/DescribeMethod` off (client specs are grouped by
+  endpoint, not method).
+
+**Todo**
+- Phase 5 next: the fail-silent Rails-facing facade (decision #003) + engine.
+- README: document `data_redactor` as an optional integration — see TODO.md
+  (docs only, deliberately not a gemspec dependency).
+
+**Problems found**
+- **Real bug caught by a spec:** connect-phase timeouts arrive as
+  `Faraday::ConnectionFailed` wrapping `Net::OpenTimeout`, not
+  `Faraday::TimeoutError`, so every connect timeout was misclassified as
+  `ConnectionError`. Since `TimeoutError` and `ConnectionError` are different
+  branches of the public hierarchy (and the Phase 5 facade will likely treat
+  timeouts as retryable), this mattered. Fixed by inspecting the wrapped cause
+  (`timeout_cause?`); upstream treats any timed-out request as a timeout.
+- Backoff is monotonic only until `BACKOFF_CAP_MS`; past the cap jitter makes
+  successive waits wobble around it. First assertion asserted global
+  monotonicity and was wrong — the client was correct.
+
 ## 2026-07-18 (night) — Phase 3: value objects
 
 **Done**

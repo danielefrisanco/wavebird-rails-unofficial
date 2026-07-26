@@ -249,6 +249,27 @@ module Wavebird
       end
     end
 
+    # Short-lived browser activation grant from +POST /v1/browser/activate+
+    # (upstream +BrowserActivationResponse+). Secondary path — only needed for
+    # Script Tag / pure-browser integrations.
+    BrowserActivation = Data.define(:activation_token, :expires_at_ms, :raw) do
+      include SafeInspect
+
+      # +activation_token+ is a short-lived Bearer credential, masked like the
+      # other proof material.
+      #
+      # @return [Array<Symbol>]
+      def self.extra_sensitive_members
+        [:activation_token]
+      end
+
+      # @param hash [Hash] response body
+      # @return [BrowserActivation]
+      def self.from_api(hash)
+        new(**Types.members_from(self, hash), raw: hash)
+      end
+    end
+
     # Non-secret runtime project configuration from
     # +GET /v1/projects/{client_id}/config+. Shape is server-owned; access
     # fields via {#[]}.
