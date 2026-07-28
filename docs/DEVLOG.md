@@ -2,6 +2,46 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-28 — Phase 6a: Stimulus controller (hosted-renderer glue) + install docs
+
+**Done**
+- `app/javascript/controllers/wavebird_controller.js`: decorates the slot
+  `<section>`. Loads `/v1/render.js` once per page (idempotent — skips if
+  `window.wavebird` or a matching `<script>` already present) and degrades
+  silently on load failure. render.js owns the turn (POST, reveal, iframe mount),
+  so the controller never fetches or toggles the element — it only bridges the
+  host's chat turn into `window.wavebird.withTurn(...)`.
+- Two host entry points (decision #008): **path C** — the faithful upstream
+  global `window.wavebird.withTurn('#wavebird-slot', work)` keeps working
+  untouched; **path A** — a `wavebird:turn` CustomEvent carrying `detail.work`,
+  wrapped in `withTurn` with the stable `session_id` injected as the explicit
+  request body (render.js's own default body is just a random uuid). Path A runs
+  `detail.work()` unwrapped when `window.wavebird` is absent, and supports an
+  optional `detail.done(error, value)` for hosts that dispatch fire-and-forget.
+- `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
+  registering the controller under the `wavebird` identifier. Both JS files ship
+  via the gemspec `app/**/*` glob (verified with `gem build`).
+- `INSTALL.md` (importmap + jsbundling setups, both host entry points, verify
+  checklist); added to the gemspec `files` glob so it ships with the gem.
+
+**Decisions**
+- Split Phase 6 into **6a (this — Stimulus glue + docs)** and **6b (next — async
+  delivery mode)**, Daniele's call. The blocking default already works end-to-end
+  (Phase 5), so 6a is a clean reviewable unit and the heavier ActiveJob/Turbo-
+  Stream path lands on its own boundary. Phase 8's Capybara coverage remapped to
+  both halves (paths A + C, plus the async broadcast).
+- #008 logged: two host entry points rather than inventing one Rails-only
+  interface — the vendor's own standard is a framework-agnostic global, which we
+  keep, plus the Stimulus-idiomatic CustomEvent bridge for Hotwire hosts.
+
+**Verification**
+- `rake` green on Ruby 3.4.10: 261 examples, 100% line + branch, RuboCop clean.
+  The JS is inert to the Ruby suite; its lifecycle is exercised by Phase 8
+  Capybara. Controller checked against the render.js snapshot: passes a
+  `{target, endpoint, body}` options object, which `readTurnOptions` correctly
+  detects, and reads the endpoint from `data-wavebird-endpoint` (matching
+  `readEndpoint`).
+
 ## 2026-07-26 — Phase 5: Rails engine, fail-silent facade, helpers (blocking path)
 
 **Done**

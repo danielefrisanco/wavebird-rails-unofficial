@@ -88,7 +88,7 @@ browser as `{ fill: false }` with 200.
 
 | npm subpath | Ruby | Decision |
 |---|---|---|
-| `./react` (`WavebirdAd`), `./mount` | plain hidden `<section>` + Stimulus hook + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) — **not** a Turbo Frame (decision #006): the renderer owns the element via `replaceChildren`/`hidden`, so Stimulus decorates it and async mode reveals it via Turbo Streams | adapt — per build prompt §2 and wavebird's own API-first guidance |
+| `./react` (`WavebirdAd`), `./mount` | plain hidden `<section>` + Stimulus hook + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) — **not** a Turbo Frame (decision #006): the renderer owns the element via `replaceChildren`/`hidden`, so Stimulus decorates it and async mode reveals it via Turbo Streams. The `wavebird` Stimulus controller offers two host entry points into `withTurn` (decision #008): the faithful upstream global (`window.wavebird.withTurn('#wavebird-slot', work)`) and a `wavebird:turn` CustomEvent bridge that injects the stable `session_id`. | adapt — per build prompt §2 and wavebird's own API-first guidance |
 | `./browser` (browser client) | not ported | skip — Script Tag covers browsers |
 | `./consent`, `./consent/react` (dialog, TCF strings, consent store) | `#record_consent` API only; host app CMP supplies UI | adapt (v1) — TCF string support = later todo |
 
