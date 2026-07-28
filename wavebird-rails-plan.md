@@ -153,20 +153,53 @@ no-fill and error paths return 200 hide-slot payloads; helper output markup
 
 ## Phase 6 — Stimulus controller (hosted renderer glue)
 
+Split into **6a (this phase — Stimulus glue + install docs)** and **6b (next —
+async delivery mode)**, Daniele's call: the blocking default is already working
+end-to-end (Phase 5), so 6a lands the browser glue as a clean, reviewable unit
+and 6b tackles the heavier ActiveJob/Turbo-Stream path on its own commit
+boundary. Neither half gets real (Capybara) tests until Phase 8.
+
+### Phase 6a — Stimulus glue + install docs (this phase)
+
 - [ ] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
-  once (idempotent), wraps `window.wavebird.withTurn()` around the chat turn, POSTs
-  to the engine endpoint, reveals the slot `<section>` on fill (the hosted
-  renderer mounts the iframe), keeps it hidden on no-fill; degrades silently if
-  render.js fails to load.
+  once (idempotent), degrades silently if it fails to load. render.js itself owns
+  the turn: it POSTs to the slot's `data-wavebird-endpoint`, reveals the
+  `<section>` on fill (mounts the iframe via `replaceChildren`/`hidden`), keeps it
+  hidden on no-fill — the controller does **not** POST, parse, or toggle the
+  element. Two host entry points into `window.wavebird.withTurn({target, endpoint,
+  body})`, decision #008:
+  - **Path C (faithful upstream global):** the host calls
+    `window.wavebird.withTurn('#wavebird-slot', work)` directly, exactly per the
+    integration brief — works once render.js is loaded, no Stimulus coupling.
+  - **Path A (Stimulus-idiomatic bridge):** the controller listens for a
+    `wavebird:turn` CustomEvent and wraps `detail.work` in `withTurn`, passing the
+    stable `session_id` (from the helper's Stimulus value) as the explicit `body`
+    (render.js's default body is only a random uuid). Falls back to running
+    `detail.work()` unwrapped if `window.wavebird` is absent, so the chat turn is
+    never blocked.
 - [ ] Verify lifecycle semantics against the **actual hosted render.js** (fetched
   live 2026-07-18; exposes `withTurn`, `startTurn`, `clearPlacement`) — behavior
   parity, not code translation. Keep the snapshot in `docs/upstream/` for diffing.
-- [ ] Async-mode wiring: Turbo Stream subscription per slot
-  (`turbo_stream_from`), broadcast partial that reveals the frame on fill /
-  removes it on no-fill; graceful fallback when ActionCable isn't configured.
-- [ ] Install docs for importmap AND jsbundling setups.
+- [ ] `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
+  registering the controller under the `wavebird` identifier; ship the JS in the
+  gemspec `files` glob (`app/**/*`).
+- [ ] Install docs (`INSTALL.md`) for importmap AND jsbundling setups.
 
 **Tests:** covered by Phase 8 system tests; unit-test any pure JS helpers if extracted.
+
+### Phase 6b — Async delivery mode (next phase)
+
+- [ ] Fail-silent facade methods `create_job` / `await_decision` (wrap the raising
+  client the same way `create_placement` is wrapped, decision #003) — async needs
+  both; the client already provides them (`await_decision` is the upstream-faithful
+  polling ladder, decision #001).
+- [ ] Async-mode wiring (opt-in `mode: :async`): controller calls `#create_job`
+  (non-blocking, zero added chat latency) → `Wavebird::DecisionPollJob` (ActiveJob,
+  SolidQueue-compatible) → `facade.await_decision(slot_id)` → on decision,
+  `Turbo::StreamsChannel.broadcast_*` reveals/hides the slot `<section>`.
+- [ ] Turbo Stream subscription per slot (`turbo_stream_from`), broadcast partial
+  that reveals the frame on fill / removes it on no-fill; graceful fallback when
+  ActionCable isn't configured (host degrades to the blocking default).
 
 ## Phase 7 — Railtie security checks
 
@@ -179,13 +212,24 @@ no-fill and error paths return 200 hide-slot payloads; helper output markup
 
 ## Phase 8 — System tests (dummy app + Capybara)
 
-- [ ] Minimal dummy Rails app under `spec/dummy/` with a chat page using the helpers.
-- [ ] Capybara + mocked `/v1/placements`: fill → slot section revealed; no-fill →
-  frame stays hidden and chat flow proceeds; wavebird API down → chat unaffected.
-- [ ] Async mode: mocked `/v1/jobs` + `/v1/decisions/{slot_id}` → job runs →
-  Turbo Stream broadcast fills the slot; no-fill broadcast removes it; job
-  failure leaves chat flow untouched.
-- [ ] SimpleCov: 100% on `lib/wavebird/*` (per §6), enforced in CI.
+- [ ] Minimal dummy Rails app under `spec/dummy/` with a chat page using the
+  helpers, a registered `wavebird` Stimulus controller (Phase 6a), and a JS
+  bundle Capybara can drive (this is where `rspec-rails` + Capybara + a real
+  asset build first enter the suite — Phases 5–6 used only rack-test).
+- [ ] **Phase 6a paths** — Capybara + mocked `/v1/placements`, both host entry
+  points from decision #008: **path A** (dispatch `wavebird:turn` with `detail.work`)
+  and **path C** (call `window.wavebird.withTurn('#wavebird-slot-below', work)`
+  directly). fill → slot section revealed; no-fill → frame stays hidden and chat
+  flow proceeds; wavebird API down / render.js fails to load → chat turn still
+  runs unwrapped and is unaffected; `session_id` from the helper value reaches the
+  request body on path A.
+- [ ] **Phase 6b path** — async mode: mocked `/v1/jobs` + `/v1/decisions/{slot_id}`
+  → job runs → Turbo Stream broadcast fills the slot; no-fill broadcast removes it;
+  job failure leaves chat flow untouched; no ActionCable configured → degrades to
+  the blocking default.
+- [ ] SimpleCov: 100% on `lib/wavebird/*` (per §6), enforced in CI. (JS lifecycle
+  is exercised through Capybara, not line-covered; any pure JS helper extracted in
+  Phase 6 gets a unit test.)
 
 **Gate:** full matrix CI green.
 
