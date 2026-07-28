@@ -11,9 +11,10 @@ Gem::Specification.new do |spec|
   spec.summary = "Rails client and Hotwire integration for the wavebird Compute Sponsoring API."
   spec.description = <<~DESC.strip
     Server-side API client plus Rails integration (engine routes, controller,
-    Turbo Frame helpers, Stimulus glue for wavebird's hosted renderer) for
-    wavebird (https://wavebird.ai). A Ruby/Rails port of the original public
-    wavebird TypeScript SDK (https://github.com/wavebird-ai/wavebird).
+    slot view helpers, Stimulus glue for wavebird's hosted renderer, and an
+    optional async delivery mode over Turbo Streams) for wavebird
+    (https://wavebird.ai). A Ruby/Rails port of the original public wavebird
+    TypeScript SDK (https://github.com/wavebird-ai/wavebird).
   DESC
   spec.homepage = "https://github.com/danielefrisanco/wavebird-rails"
   spec.license = "MIT"

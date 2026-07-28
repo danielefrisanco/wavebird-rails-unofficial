@@ -160,6 +160,47 @@ injects it from the slot's Stimulus value.
 
 ---
 
+## Async delivery mode (optional)
+
+By default the slot fills **synchronously**: the browser POSTs, the server waits
+`wait_ms` for the decision, and the response comes back inline. This needs
+nothing beyond the setup above.
+
+**Async mode** instead returns immediately and reveals the slot a moment later
+over a Turbo Stream, so the chat turn adds zero latency. It is opt-in and leans
+on two components your app most likely already has:
+
+- **ActiveJob** (with any adapter — Sidekiq, SolidQueue, etc.) runs the poll job.
+- **Turbo Streams over ActionCable** (`turbo-rails` + a `config/cable.yml`
+  adapter) delivers the reveal to the browser.
+
+These are **optional runtime requirements**, not gem dependencies: if either is
+missing, the endpoint logs a warning and transparently falls back to the
+synchronous path — the slot still fills, so nothing breaks.
+
+To enable it, render the slot with `async: true` (which also subscribes it to its
+Turbo Stream) and post `mode: "async"` from your turn:
+
+```erb
+<%= wavebird_render_script_tag %>
+<%= wavebird_slot endpoint: wavebird.sponsor_slot_path,
+                  session_id: wavebird_session_id,
+                  position: "below",
+                  async: true %>
+```
+
+```js
+// dispatch the turn with mode: async in the request body
+slot.dispatchEvent(new CustomEvent("wavebird:turn", {
+  detail: { work: () => sendChatMessage(message) },
+}));
+```
+
+The background job broadcasts only browser-safe fields — the asset token is
+folded into `frame_url` **on the server** and never reaches the browser, exactly
+as in the synchronous path. Set the job's queue with
+`Wavebird.configure { |c| c.async_queue_name = :low_priority }` if desired.
+
 ## Verifying
 
 - The AI response still appears when wavebird is unavailable (block `render.js`

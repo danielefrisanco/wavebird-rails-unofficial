@@ -97,6 +97,77 @@ RSpec.describe Wavebird::Facade do
     end
   end
 
+  describe "#create_job" do
+    let(:job) { Wavebird::Types::AcceptedJob.from_api("job_id" => "job_1", "slot_ids" => ["slot_1"], "status" => "accepted") }
+
+    it "returns the client's job on success" do
+      allow(client).to receive(:create_job).and_return(job)
+
+      expect(facade.create_job(job_type: "chat")).to be(job)
+    end
+
+    it "forwards keyword arguments to the client" do
+      allow(client).to receive(:create_job).and_return(job)
+
+      facade.create_job(job_type: "chat", session_id: "sess_1")
+
+      expect(client).to have_received(:create_job).with(job_type: "chat", session_id: "sess_1")
+    end
+
+    it "swallows a Wavebird::Error and returns nil (caller skips the poll)" do
+      allow(client).to receive(:create_job).and_raise(Wavebird::APIError, "no")
+      logger = instance_spy(Logger)
+      config.logger = logger
+
+      expect(facade.create_job(job_type: "chat")).to be_nil
+      expect(logger).to have_received(:warn).with(/Wavebird::APIError/)
+    end
+
+    it "does not swallow non-Wavebird errors" do
+      allow(client).to receive(:create_job).and_raise(ArgumentError, "bad")
+
+      expect { facade.create_job(job_type: "chat") }.to raise_error(ArgumentError)
+    end
+  end
+
+  describe "#await_decision" do
+    it "returns the client's decision on success" do
+      decision = Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => true)
+      allow(client).to receive(:await_decision).and_return(decision)
+
+      expect(facade.await_decision("slot_1")).to be(decision)
+    end
+
+    it "swallows a Wavebird::Error and returns a synthetic ready no-fill for the slot" do
+      allow(client).to receive(:await_decision).and_raise(Wavebird::DecisionTimeoutError, "slow")
+
+      result = facade.await_decision("slot_1")
+
+      expect(result).to be_a(Wavebird::Types::Decision)
+      expect(result.slot_id).to eq("slot_1")
+      expect(result).to be_no_fill
+    end
+
+    it "reports the swallowed error through on_error and the logger" do
+      observed = []
+      logger = instance_spy(Logger)
+      config.on_error = ->(e) { observed << e }
+      config.logger = logger
+      allow(client).to receive(:await_decision).and_raise(Wavebird::ConnectionError, "down")
+
+      facade.await_decision("slot_1")
+
+      expect(observed).to contain_exactly(an_instance_of(Wavebird::ConnectionError))
+      expect(logger).to have_received(:warn).with(/Wavebird::ConnectionError/)
+    end
+
+    it "does not swallow non-Wavebird errors" do
+      allow(client).to receive(:await_decision).and_raise(ArgumentError, "bad")
+
+      expect { facade.await_decision("slot_1") }.to raise_error(ArgumentError)
+    end
+  end
+
   describe "defaults" do
     it "wraps a real Client against the global configuration by default" do
       facade = described_class.new

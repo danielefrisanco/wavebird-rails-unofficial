@@ -17,7 +17,7 @@ its legacy wrapper transport (`/public/wrapper/v1/*`).
 |---|---|---|---|
 | `baseUrl` (HTTPS enforced except localhost) | `config.api_base_url` | port | Mirror the HTTPS-except-localhost validation |
 | `getApiKey` (callable, read per request) | `config.secret_key` static + optional callable support | port (adapted) | Accept a `Proc` for rotation parity |
-| `decisionDelivery` (`auto\|ws\|polling\|callback`) | polling only in v1 | adapt | Decision #001; `callback` mode not ported (needs public callback URL — see open Q3) |
+| `decisionDelivery` (`auto\|ws\|polling\|callback`) | polling only in v1, surfaced as opt-in async mode (`mode: "async"`) — non-blocking `create_job` → `DecisionPollJob` long-poll → Turbo Stream reveal | adapt | Decision #001 (transport) + #009 (reveal keeps asset_token server-side) + #010 (ActiveJob/ActionCable optional, graceful fallback); `callback` mode not ported (needs public callback URL — see open Q3) |
 | `publisher` default metadata | `config.default_publisher` | port | Merged into every job unless overridden |
 | `options.timeout_ms` (default 2000, clamp 250..30000) | `config.timeout_ms` | port | Same default + clamp |
 | `options.decision_timeout_ms` (default 30000, clamp 1000..60000) | `config.decision_timeout_ms` | port | Governs total poll budget — required by #001 |
@@ -88,7 +88,7 @@ browser as `{ fill: false }` with 200.
 
 | npm subpath | Ruby | Decision |
 |---|---|---|
-| `./react` (`WavebirdAd`), `./mount` | plain hidden `<section>` + Stimulus hook + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) — **not** a Turbo Frame (decision #006): the renderer owns the element via `replaceChildren`/`hidden`, so Stimulus decorates it and async mode reveals it via Turbo Streams. The `wavebird` Stimulus controller offers two host entry points into `withTurn` (decision #008): the faithful upstream global (`window.wavebird.withTurn('#wavebird-slot', work)`) and a `wavebird:turn` CustomEvent bridge that injects the stable `session_id`. | adapt — per build prompt §2 and wavebird's own API-first guidance |
+| `./react` (`WavebirdAd`), `./mount` | plain hidden `<section>` + Stimulus hook + hosted `render.js` (`withTurn`/`startTurn`/`clearPlacement`, snapshot in docs/upstream/) — **not** a Turbo Frame (decision #006): the renderer owns the element via `replaceChildren`/`hidden`, so Stimulus decorates it and async mode reveals it via Turbo Streams. The `wavebird` Stimulus controller offers two host entry points into `withTurn` (decision #008): the faithful upstream global (`window.wavebird.withTurn('#wavebird-slot', work)`) and a `wavebird:turn` CustomEvent bridge that injects the stable `session_id`. Async mode reveals the slot out-of-band by handing the broadcast payload to the renderer's own `renderPlacement`/`clearPlacement` (decision #009) — same iframe + beacon lifecycle as the sync path. Note the SDK's own `mountWavebirdAd`/`WavebirdAd` DOM builders are **deprecated** upstream in favour of this hosted `render.js` path. | adapt — per build prompt §2 and wavebird's own API-first guidance |
 | `./browser` (browser client) | not ported | skip — Script Tag covers browsers |
 | `./consent`, `./consent/react` (dialog, TCF strings, consent store) | `#record_consent` API only; host app CMP supplies UI | adapt (v1) — TCF string support = later todo |
 

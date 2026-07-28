@@ -5,6 +5,11 @@ source "https://rubygems.org"
 gemspec
 
 group :development, :test do
+  # Async delivery mode (decision #001) leans on ActiveJob (the poll job) and
+  # Turbo/ActionCable (the broadcast). These are *optional* runtime requirements
+  # for the host app, not gem dependencies — declared here only so the test suite
+  # can exercise the async path.
+  gem "activejob", ">= 7.1", "< 9"
   gem "dotenv", "~> 3.1"
   gem "rack-test", "~> 2.1"
   gem "rake", "~> 13.2"

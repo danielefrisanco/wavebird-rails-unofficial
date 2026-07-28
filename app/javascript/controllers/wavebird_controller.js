@@ -29,6 +29,8 @@ import { Controller } from "@hotwired/stimulus";
 //     not carry our session id). If `window.wavebird` is unavailable, it runs
 //     `detail.work()` unwrapped so the chat turn is never blocked.
 export default class extends Controller {
+  static targets = ["signal"];
+
   static values = {
     sessionId: String,
     position: String,
@@ -51,6 +53,31 @@ export default class extends Controller {
   }
 
   #onTurn = null;
+
+  // Async delivery mode (decision #001). The DecisionPollJob broadcasts a Turbo
+  // Stream that replaces the `signal` target inside this element with a data-only
+  // node carrying the browser-safe payload. Stimulus fires `signalTargetConnected`
+  // when that node lands; we hand the payload to the hosted renderer — the same
+  // `renderPlacement`/`clearPlacement` entry points the synchronous turn uses
+  // internally, so the iframe mount + viewability beacons are identical. The
+  // asset_token never appears here: the server already folded it into `frame_url`.
+  signalTargetConnected(el) {
+    let payload;
+    try {
+      payload = JSON.parse(el.dataset.wavebirdPayload || "{}");
+    } catch (_error) {
+      payload = { fill: false };
+    }
+
+    const wavebird = typeof window !== "undefined" ? window.wavebird : null;
+    if (!wavebird) return; // render.js not loaded yet; slot simply stays hidden
+
+    if (payload && payload.fill) {
+      wavebird.renderPlacement({ target: this.element, placement: { render: payload } });
+    } else {
+      wavebird.clearPlacement({ target: this.element });
+    }
+  }
 
   // Path A. Wrap the host's work in a wavebird turn, then let it resolve.
   //

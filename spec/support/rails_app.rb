@@ -8,6 +8,12 @@ require "rails"
 require "rack/test"
 require "tmpdir"
 
+# ActiveJob is an optional runtime dependency of the gem (async delivery mode,
+# decision #001). Load it here with the test adapter so async-mode specs can
+# assert enqueues; a client-only host that never uses async would not load it.
+require "active_job"
+ActiveJob::Base.queue_adapter = :test
+
 module WavebirdSpec
   # An empty throwaway root, so the test application does NOT adopt the gem's own
   # config/routes.rb as its application routes (the gem is developed in place, so

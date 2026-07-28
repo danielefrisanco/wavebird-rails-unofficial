@@ -187,19 +187,45 @@ boundary. Neither half gets real (Capybara) tests until Phase 8.
 
 **Tests:** covered by Phase 8 system tests; unit-test any pure JS helpers if extracted.
 
-### Phase 6b — Async delivery mode (next phase)
+### Phase 6b — Async delivery mode — **done**
 
-- [ ] Fail-silent facade methods `create_job` / `await_decision` (wrap the raising
-  client the same way `create_placement` is wrapped, decision #003) — async needs
-  both; the client already provides them (`await_decision` is the upstream-faithful
-  polling ladder, decision #001).
-- [ ] Async-mode wiring (opt-in `mode: :async`): controller calls `#create_job`
-  (non-blocking, zero added chat latency) → `Wavebird::DecisionPollJob` (ActiveJob,
-  SolidQueue-compatible) → `facade.await_decision(slot_id)` → on decision,
-  `Turbo::StreamsChannel.broadcast_*` reveals/hides the slot `<section>`.
-- [ ] Turbo Stream subscription per slot (`turbo_stream_from`), broadcast partial
-  that reveals the frame on fill / removes it on no-fill; graceful fallback when
-  ActionCable isn't configured (host degrades to the blocking default).
+- [x] Fail-silent facade methods `create_job` (→ `nil` on error) / `await_decision`
+  (→ synthetic no-fill `Decision` on error, incl. `DecisionTimeoutError`), wrapping
+  the raising client the same way `create_placement` is (decision #003). The client
+  already provided both (`await_decision` is the upstream-faithful polling ladder,
+  decision #001).
+- [x] Async-mode wiring (opt-in `mode: "async"`): controller `#create` branches to
+  `#create_job` (non-blocking, zero added chat latency) → enqueues
+  `Wavebird::DecisionPollJob` (ActiveJob) → `facade.await_decision(slot_id)` → on
+  decision, `Turbo::StreamsChannel.broadcast_replace_to` the slot's stream.
+- [x] Turbo Stream subscription per slot (`wavebird_slot(async: true)` →
+  `turbo_stream_from`, guarded on turbo-rails presence) + `_slot_broadcast` partial
+  → the `wavebird` Stimulus controller's `signalTargetConnected` hands the payload
+  to `window.wavebird.renderPlacement` (fill) / `clearPlacement` (no-fill) — the
+  hosted renderer's own out-of-band entry point, so the iframe + viewability
+  beacons match the blocking path (single source of truth; no Ruby iframe/beacon
+  reimplementation).
+- [x] **Security boundary (decision #009):** the decision poll returns the raw
+  `asset_token` (no `frame_url`, unlike the placements endpoint). The server
+  reconstructs `frame_url = {api_base_url}/v1/render/{token}` itself (render.js's
+  own `renderFrom` formula, `CGI.escapeURIComponent` per the client's `#encode`) and
+  broadcasts only that — the `asset_token` never crosses to the browser. Shared
+  browser-safe projection extracted to `Wavebird::SlotPayload` (used by both the
+  blocking controller and the async job); asserted by tests on both paths.
+- [x] **Graceful fallback (decision #010):** async leans on ActiveJob (poll job) +
+  Turbo/ActionCable (broadcast), all *optional* — the gem's runtime deps stay
+  faraday + railties. `DecisionPollJob` lives off the Zeitwerk path under `lib/`,
+  guarded by `return unless defined?(ActiveJob::Base)` and lazy-`require`d only on
+  the async path; when Turbo/ActiveJob is absent the controller logs a one-line
+  warning and degrades to the blocking default. `config.async_queue_name` (default
+  `:default`) sets the job queue.
+
+**Tests (done):** facade async methods; `SlotPayload` (token-boundary assertions
+on both shapes); controller async branch + both fallbacks + the unavailable warning;
+job broadcast (reveal/hide, token never in payload, guarded no-op, queue name);
+helper `async:` subscription. 292 examples, 100% line + branch, RuboCop clean.
+Browser lifecycle (the `signalTargetConnected` → `renderPlacement` path) is covered
+by Phase 8 Capybara.
 
 ## Phase 7 — Railtie security checks
 

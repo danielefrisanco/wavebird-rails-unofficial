@@ -7,6 +7,7 @@ require_relative "wavebird/types"
 require_relative "wavebird/decision_normalizer"
 require_relative "wavebird/client"
 require_relative "wavebird/facade"
+require_relative "wavebird/slot_payload"
 
 # Rails client and Hotwire integration for the wavebird Compute Sponsoring API
 # (https://wavebird.ai). Ported from the original public wavebird TypeScript
