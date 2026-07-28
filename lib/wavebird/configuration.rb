@@ -61,6 +61,10 @@ module Wavebird
     # @return [String] value for the x-csl-wrapper-version request header
     attr_accessor :wrapper_version
 
+    # @return [String, Symbol] ActiveJob queue for {DecisionPollJob} (async
+    #   delivery mode); defaults to +:default+
+    attr_accessor :async_queue_name
+
     # @return [String] API base URL, HTTPS-only except localhost
     attr_reader :api_base_url
 
@@ -75,6 +79,7 @@ module Wavebird
       @on_error = nil
       @logger = nil
       @wrapper_version = "wavebird-rails/#{VERSION}"
+      @async_queue_name = :default
       NUMERIC_OPTIONS.each { |name, (_, _, default)| instance_variable_set(:"@#{name}", default) }
     end
 

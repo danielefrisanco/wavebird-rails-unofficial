@@ -48,6 +48,34 @@ module Wavebird
       no_fill_response
     end
 
+    # Creates a job without waiting for decisions, never raising — the
+    # non-blocking entry point for async delivery mode (decision #001). Returns
+    # +nil+ when the job could not be created, so the caller simply skips
+    # enqueuing the poll and the slot stays hidden. See {Client#create_job}.
+    #
+    # @return [Types::AcceptedJob, nil]
+    def create_job(**)
+      client.create_job(**)
+    rescue Error => e
+      report(e)
+      nil
+    end
+
+    # Polls a slot until its decision is ready, never raising. On any
+    # {Wavebird::Error} — including {DecisionTimeoutError} when the polling budget
+    # is exhausted — the error is reported and a synthetic no-fill {Types::Decision}
+    # is returned, so the async broadcast path treats an unreachable/slow auction
+    # exactly like an honest no-fill: hide the slot and continue (decision #003).
+    #
+    # @param slot_id [String]
+    # @return [Types::Decision] a real ready decision, or a synthetic no-fill
+    def await_decision(slot_id)
+      client.await_decision(slot_id)
+    rescue Error => e
+      report(e)
+      no_fill_decision(slot_id)
+    end
+
     # Records a beacon, never raising. Returns +nil+ when it could not be sent.
     #
     # @return [Types::BeaconResult, nil]
@@ -64,6 +92,13 @@ module Wavebird
     # rendering path can't tell a failure from an honest no-fill.
     def no_fill_response
       Types::PlacementResponse.from_api("status" => "no_fill", "placement" => nil, "decision" => nil)
+    end
+
+    # A synthetic ready no-fill decision for the slot, shaped like a genuine empty
+    # auction so the async broadcast path can't tell a failure from an honest
+    # no-fill (mirrors {#no_fill_response} for the decision-polling flow).
+    def no_fill_decision(slot_id)
+      Types::Decision.from_api("slot_id" => slot_id, "status" => "ready", "fill" => false)
     end
 
     # Reports a swallowed error through the same fail-silent channel the polling

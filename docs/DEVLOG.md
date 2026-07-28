@@ -2,6 +2,47 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-28 — Phase 6b: Async delivery mode (ActiveJob poll → Turbo Stream)
+
+**Done**
+- Opt-in `mode: "async"`: controller `#create` branches to a non-blocking
+  `create_job`, enqueues `Wavebird::DecisionPollJob`, and returns `{ pending: true }`
+  — zero added chat latency. The job long-polls `await_decision` server-side and
+  broadcasts a Turbo Stream that reveals/hides the slot.
+- Facade extended fail-silently (decision #003): `create_job` → `nil` on error;
+  `await_decision` → synthetic ready no-fill `Decision` on any error, including
+  `DecisionTimeoutError`.
+- `Wavebird::SlotPayload`: extracted the browser-safe projection so the blocking
+  controller (from a `PlacementResponse`) and the async job (from a `Decision`)
+  share one source of truth.
+- Reveal path: `_slot_broadcast` partial → the `wavebird` Stimulus controller's
+  `signalTargetConnected` hands the payload to `window.wavebird.renderPlacement`
+  (fill) / `clearPlacement` (no-fill) — the hosted renderer's own out-of-band
+  entry point, so iframe + viewability beacons match the blocking path.
+- `wavebird_slot(async: true)` emits `turbo_stream_from` (guarded on turbo-rails).
+
+**Decisions / research**
+- #009 (security-first, Daniele): the decision poll returns the raw `asset_token`,
+  not a `frame_url`. The **server** reconstructs `frame_url` from the token
+  (render.js's `renderFrom` formula, `CGI.escapeURIComponent` per the client's
+  `#encode`) and broadcasts only that — the token never crosses to the browser.
+  Chose `renderPlacement` (the SDK's own out-of-band renderer) over Ruby-rendered
+  iframes after reading the render.js snapshot: it keeps beacon parity and one
+  source of truth. Researched: the SDK's own DOM components (`mountWavebirdAd`) are
+  *deprecated* and build the DOM themselves; the hosted `render.js` path is the
+  current, non-deprecated one — so `renderPlacement` is also "closest to the SDK".
+- #010 (optional-dep graceful fallback, Daniele): ActiveJob + Turbo/ActionCable are
+  optional. Runtime deps stay faraday + railties; the job lives off the Zeitwerk
+  path, guarded (`return unless defined?(ActiveJob::Base)`) and lazy-required; the
+  controller falls back to blocking + one warning when they're absent. `activejob`
+  is a dev-only dep. Confirmed the bundle ships neither activejob nor actioncable
+  by default, which is why this had to be optional.
+
+**Verification**
+- `rake` green on Ruby 3.4.10: 292 examples, 100% line + branch, RuboCop clean.
+  Token-boundary assertions on both the blocking and async paths. Browser
+  `signalTargetConnected → renderPlacement` lifecycle is Phase 8 Capybara.
+
 ## 2026-07-28 — Phase 6a: Stimulus controller (hosted-renderer glue) + install docs
 
 **Done**

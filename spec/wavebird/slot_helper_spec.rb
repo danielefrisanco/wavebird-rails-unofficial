@@ -64,5 +64,30 @@ RSpec.describe Wavebird::SlotHelper do
     it "merges extra html options onto the section" do
       expect(view.wavebird_slot(endpoint: "/e", class: "ad-slot")).to include(%(class="ad-slot"))
     end
+
+    it "emits no Turbo Stream subscription in the default (blocking) mode" do
+      expect(html).not_to include("turbo-cable-stream-source")
+    end
+  end
+
+  describe "#wavebird_slot in async mode" do
+    it "subscribes the slot to its Turbo Stream when turbo_stream_from is available" do
+      # Give the view a turbo_stream_from, mimicking turbo-rails being loaded.
+      view.define_singleton_method(:turbo_stream_from) do |stream|
+        %(<turbo-cable-stream-source signed-stream-name="#{stream}"></turbo-cable-stream-source>).html_safe
+      end
+
+      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+      expect(html).to include(%(signed-stream-name="wavebird_slot_below"))
+      expect(html).to include(%(id="wavebird-slot-below")) # the section is still rendered
+    end
+
+    it "renders just the section (no crash) when turbo_stream_from is unavailable" do
+      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+      expect(html).to include(%(id="wavebird-slot-below"))
+      expect(html).not_to include("turbo-cable-stream-source")
+    end
   end
 end
