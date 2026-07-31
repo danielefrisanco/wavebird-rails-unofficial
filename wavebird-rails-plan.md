@@ -227,14 +227,42 @@ helper `async:` subscription. 292 examples, 100% line + branch, RuboCop clean.
 Browser lifecycle (the `signalTargetConnected` → `renderPlacement` path) is covered
 by Phase 8 Capybara.
 
-## Phase 7 — Railtie security checks
+## Phase 7 — Railtie security checks — **done**
 
-- [ ] Railtie boot check (§4): raise loudly if the client is required from an
-  asset-pipeline/`app/javascript`-reachable context; document what triggers it.
-- [ ] Verify no gem code path writes `secret_key` or `asset_token` to logs
-  (grep-based spec over instrumentation payloads + inspect output).
+- [x] Railtie boot check (§4), two guards in `Wavebird::BootCheck`, both raising
+  `ConfigurationError` loudly (decision #011):
+  - **Require-context guard** (`assert_server_side_require!`, run from
+    `lib/wavebird.rb` at require time): rejects a `require "wavebird"` whose first
+    non-gem, non-Ruby-internal caller frame sits under a host's `app/assets` or
+    `app/javascript` — the literal case §4 names. Message names the offending file
+    and says where to require it instead.
+  - **Asset-path scan** (`assert_assets_paths_safe!`, run from the
+    `wavebird.boot_check` initializer in `Wavebird::Railtie`): rejects asset load
+    paths that would publish the gem's server-side Ruby (the gem root, its `lib/`,
+    or any ancestor containing it). The gem's own `app/javascript` is explicitly
+    allowed — that is the documented importmap setup in INSTALL.md.
+- [x] Verify no gem code path writes `secret_key` or `asset_token` to logs:
+  `spec/wavebird/leak_audit_spec.rb` greps every `lib/**/*.rb` + `app/**/*.rb` for
+  string interpolation of a sensitive value, with a three-entry allowlist (the
+  `Bearer` header; `slot_payload`'s server-side `frame_url`; `configuration`'s
+  redacting `#inspect`) each carrying its rationale. Complements the existing
+  runtime leak specs (instrumentation payload, value-object/config `#inspect`,
+  browser JSON, async broadcast).
+- Already satisfied before this phase, re-confirmed here: blank-key raise at first
+  client use (`require_secret_key` + `client_request_spec.rb`), `secret_key` out of
+  `#inspect`, `asset_token` scrubbed from instrumentation and value-object output.
 
-**Tests:** Railtie boot spec; blank-key raise at first client use (per §6).
+**Tests (done):** `boot_check_spec.rb` unit-tests both guards with injected caller
+frames and asset paths (raising and passing paths, gem-own frames, Ruby internals,
+`Pathname`/nil inputs, both `run(app)` branches); `railtie_spec.rb` asserts the
+initializer is registered and delegates to `BootCheck.run`. 319 examples, 100%
+line + branch, RuboCop clean.
+
+**Note:** the raising path is unit-tested rather than boot-tested — the spec
+harness boots one in-memory `Rails::Application` per process and cannot boot a
+second (`Rails.app_class` takeover). The non-raising path is exercised for real by
+that harness booting with the gem loaded. A true subprocess boot-raise test can
+come with Phase 8's `spec/dummy`.
 
 ## Phase 8 — System tests (dummy app + Capybara)
 
