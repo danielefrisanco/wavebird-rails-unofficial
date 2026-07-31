@@ -34,6 +34,11 @@ export default class extends Controller {
   static values = {
     sessionId: String,
     position: String,
+    // Set by the view helper when the slot was rendered with `async: true`:
+    // requests async delivery and names the Turbo Stream the decision will be
+    // broadcast on. Absent in the blocking default.
+    mode: String,
+    streamName: String,
     // Absolute or relative URL of the hosted renderer script. Defaults to the
     // canonical CDN path; the view helper's script tag normally loads it first.
     scriptUrl: { type: String, default: "https://api.wavebird.ai/v1/render.js" },
@@ -111,7 +116,17 @@ export default class extends Controller {
     const input = { target: this.element };
     const endpoint = this.element.dataset.wavebirdEndpoint;
     if (endpoint) input.endpoint = endpoint;
-    if (this.sessionIdValue) input.body = { session_id: this.sessionIdValue };
+
+    // render.js's own default body carries only a random uuid, so the request
+    // body is built here whenever the slot has anything to say: the stable
+    // session id, the position hint, and — for an async slot — the delivery mode
+    // and the stream the decision should be broadcast on.
+    const body = {};
+    if (this.sessionIdValue) body.session_id = this.sessionIdValue;
+    if (this.hasPositionValue) body.position = this.positionValue;
+    if (this.hasModeValue) body.mode = this.modeValue;
+    if (this.hasStreamNameValue) body.stream_name = this.streamNameValue;
+    if (Object.keys(body).length > 0) input.body = body;
 
     return wavebird.withTurn(input, work);
   }

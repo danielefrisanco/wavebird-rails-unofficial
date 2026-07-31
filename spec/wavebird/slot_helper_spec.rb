@@ -89,5 +89,27 @@ RSpec.describe Wavebird::SlotHelper do
       expect(html).to include(%(id="wavebird-slot-below"))
       expect(html).not_to include("turbo-cable-stream-source")
     end
+
+    it "tells the Stimulus controller to request async delivery" do
+      # Without these the browser would never ask for async mode and the endpoint
+      # would silently serve the blocking default.
+      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+      expect(html).to include(%(data-wavebird-mode-value="async"))
+      expect(html).to include(%(data-wavebird-stream-name-value="wavebird_slot_below"))
+    end
+
+    it "names the stream after the slot position" do
+      html = view.wavebird_slot(endpoint: "/e", position: "sidebar", async: true)
+
+      expect(html).to include(%(data-wavebird-stream-name-value="wavebird_slot_sidebar"))
+    end
+
+    it "omits the async values entirely in the blocking default" do
+      html = view.wavebird_slot(endpoint: "/e", position: "below")
+
+      expect(html).not_to include("data-wavebird-mode-value")
+      expect(html).not_to include("data-wavebird-stream-name-value")
+    end
   end
 end

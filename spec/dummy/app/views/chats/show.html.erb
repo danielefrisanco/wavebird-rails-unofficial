@@ -1,0 +1,66 @@
+<h1>Chat</h1>
+
+<%#
+  A stand-in AI answer area. The tests assert this still gets its answer in every
+  scenario — that is the "host chat flow is never disrupted" guarantee (§4).
+%>
+<div id="answer" data-answer>(no answer yet)</div>
+
+<button id="send-path-a" type="button">Send (path A)</button>
+<button id="send-path-c" type="button">Send (path C)</button>
+
+<%#
+  The hosted-renderer script tag, emitted by the gem's own helper. In production
+  it points at https://api.wavebird.ai/v1/render.js; the specs configure
+  api_base_url at the Capybara server so it resolves to the local stand-in
+  (spec/dummy/public/v1/render.js), since the real script cannot be fetched with
+  net connections disabled. `?no_renderer=1` omits it, covering the case where
+  the renderer never loads and the chat turn must still complete (§4).
+%>
+<% unless params[:no_renderer] %>
+  <%= wavebird_render_script_tag %>
+<% end %>
+
+<%= wavebird_slot endpoint: wavebird.sponsor_slot_path,
+                  session_id: wavebird_session_id,
+                  position: "below",
+                  async: @async %>
+
+<script type="module">
+  // Stands in for the host's real chat send. Resolves after a tick so the turn
+  // is genuinely asynchronous, and records that it ran.
+  function sendChatMessage() {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        document.querySelector("[data-answer]").textContent = "AI answered";
+        window.__answerCount = (window.__answerCount || 0) + 1;
+        resolve("AI answered");
+      }, 10);
+    });
+  }
+
+  const slot = document.querySelector("#wavebird-slot-below");
+
+  // Path A (decision #008): dispatch a `wavebird:turn` event carrying the work.
+  // The Stimulus controller wraps it and injects the stable session_id.
+  document.querySelector("#send-path-a").addEventListener("click", () => {
+    slot.dispatchEvent(new CustomEvent("wavebird:turn", {
+      detail: {
+        work: () => sendChatMessage(),
+        done: () => { window.__turnDone = true; },
+      },
+    }));
+  });
+
+  // Path C (decision #008): call the vendor global directly, exactly as the
+  // integration brief documents, with the documented availability guard.
+  document.querySelector("#send-path-c").addEventListener("click", async () => {
+    const send = () => sendChatMessage();
+    if (window.wavebird?.withTurn) {
+      await window.wavebird.withTurn("#wavebird-slot-below", send);
+    } else {
+      await send();
+    }
+    window.__turnDone = true;
+  });
+</script>
