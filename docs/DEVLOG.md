@@ -2,6 +2,49 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-07-31 — Phase 7: Railtie security checks (boot guards + leak audit)
+
+**Done**
+- `Wavebird::BootCheck` — two independent boot-time guards (decision #011), both
+  raising `ConfigurationError` loudly per build prompt §4:
+  - `assert_server_side_require!` runs at `require "wavebird"` time and rejects a
+    require whose first non-gem, non-Ruby-internal caller frame lives under a
+    host's `app/assets` / `app/javascript`. Message names the offending file and
+    says where to require it instead.
+  - `assert_assets_paths_safe!` rejects asset load paths that would publish the
+    gem's server-side Ruby (gem root, its `lib/`, or an ancestor containing it),
+    while allowing the gem's own `app/javascript` — the documented importmap path,
+    which holds only Stimulus glue.
+- `Wavebird::Railtie` with the `wavebird.boot_check` initializer running the
+  asset-path scan. Separate from `Engine` (which already subclasses `Railtie`) so
+  the guard runs whether or not the engine is mounted, matching the build prompt's
+  file layout. Required from `lib/wavebird-rails.rb`'s Rails-present branch.
+- `spec/wavebird/leak_audit_spec.rb` — the plan's grep-based source audit: scans
+  every `lib`/`app` Ruby file for interpolation of `secret_key`/`asset_token`, with
+  a three-entry allowlist each carrying its rationale (the `Bearer` header;
+  `slot_payload`'s server-side `frame_url`; `configuration`'s redacting `#inspect`).
+  It caught the `configuration.rb` inspect line on first run — reviewed, confirmed
+  safe (emits only `nil`/`[REDACTED]`), allowlisted.
+
+**Notes**
+- Four of Phase 7's nominal requirements were already satisfied and specced before
+  this phase (blank-key raise at first client use, `secret_key` out of `#inspect`,
+  `asset_token` scrubbed from instrumentation and value-object output); this phase
+  re-confirmed them and built the two genuinely missing pieces.
+- The raising path is unit-tested with injected caller frames / asset paths rather
+  than by booting a doomed app: the harness boots one in-memory `Rails::Application`
+  per process and cannot boot a second. Its successful boot exercises the passing
+  path for real. A subprocess boot-raise test can come with Phase 8's `spec/dummy`.
+- §4 says "raise at boot" while §6's test bullet says the blank-key raise happens
+  "at first client use" — different checks, both honored: the blank-key raise stays
+  lazy in `require_secret_key`; these guards are about *reachability*.
+
+**Verification**
+- Smoke-tested the guard end-to-end outside the suite: a `require "wavebird"` from
+  a fake `app/javascript/` file raises with the actionable message; the same
+  require from `app/models/` loads clean.
+- `rake` green on Ruby 3.4.10: 319 examples, 100% line + branch, RuboCop clean.
+
 ## 2026-07-28 — Phase 6b: Async delivery mode (ActiveJob poll → Turbo Stream)
 
 **Done**

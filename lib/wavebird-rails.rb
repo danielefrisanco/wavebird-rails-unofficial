@@ -16,5 +16,6 @@ begin
 rescue LoadError
   # Rails not available — client-only use. Nothing further to load.
 else
+  require_relative "wavebird/railtie"
   require_relative "wavebird/engine"
 end

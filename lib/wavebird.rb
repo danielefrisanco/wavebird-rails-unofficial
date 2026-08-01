@@ -2,12 +2,17 @@
 
 require_relative "wavebird/version"
 require_relative "wavebird/errors"
+require_relative "wavebird/boot_check"
 require_relative "wavebird/configuration"
 require_relative "wavebird/types"
 require_relative "wavebird/decision_normalizer"
 require_relative "wavebird/client"
 require_relative "wavebird/facade"
 require_relative "wavebird/slot_payload"
+
+# Fail loudly if this was required from an asset-pipeline / browser-bundle tree:
+# the client holds the secret key and must stay server-side (build prompt §4).
+Wavebird::BootCheck.assert_server_side_require!
 
 # Rails client and Hotwire integration for the wavebird Compute Sponsoring API
 # (https://wavebird.ai). Ported from the original public wavebird TypeScript
