@@ -1,3 +1,7 @@
 --require spec_helper
 --format documentation
 --color
+# The Capybara system specs boot the full spec/dummy host app, which cannot
+# coexist with the rack-test app in one process (only one Rails application per
+# process). They run as their own process: `rake spec:system`.
+--exclude-pattern "system/**/*_spec.rb"

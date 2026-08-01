@@ -2,6 +2,59 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-08-01 — Phase 8: dummy host app + Capybara system tests
+
+**Done**
+- `spec/dummy` — a real Rails host app (routes, session store, Turbo Streams over
+  ActionCable) driven through headless Chrome, so the browser glue from Phases
+  6a/6b is exercised rather than simulated.
+- **No JS build step.** An importmap serves ES modules straight from where they
+  live — the gem's own `app/javascript` and the stimulus/turbo gems, via a small
+  `JsServer` — so nothing is vendored, copied or symlinked, CI needs only Ruby +
+  Chrome, and the specs load the exact files the gem ships. (First attempts used
+  copies, then symlinks; both were wrong — copies drift, symlinks embed absolute
+  machine paths.)
+- `spec/dummy/public/v1/render.js` — a stand-in for the hosted renderer, which
+  cannot be fetched with net connections disabled. `render_js_contract_spec.rb`
+  pins both it and the dated upstream snapshot against the entry points the gem
+  drives, so refreshing the snapshot fails loudly rather than silently
+  invalidating every system test.
+- 17 system examples, all green: 12 blocking (paths A and C across fill, no-fill,
+  API down, renderer absent, session-id propagation, secret-key exclusion) and 5
+  async (endpoint answers `{pending: true}`, job polls, *real* cable broadcast,
+  Stimulus reveal, token boundary).
+- CI gains a `system` job (Ruby 3.4 + Chrome) running `rake spec:system`.
+
+**Two bugs the browser found — neither visible to unit tests (decision #012)**
+1. **Async mode was unreachable from the browser.** The helper rendered the Turbo
+   Stream subscription, but nothing told the endpoint to use async: the Stimulus
+   controller never sent `mode`/`stream_name`, so every async slot silently fell
+   back to blocking. A host following INSTALL.md would have got the wrong
+   behavior with no error. Fixed on both sides.
+2. **The broadcast never reached the DOM.** The job used `broadcast_replace_to`
+   with `target:` set to the *stream* name (`wavebird_slot_below`), which no
+   element on the page had — and a Turbo Stream `replace` against a missing
+   target is a silent no-op, so the message arrived and did nothing. Fixed:
+   `broadcast_append_to` into the slot `<section>` itself, with
+   `SlotPayload.slot_dom_id` now the single source of that id for helper and job
+   alike, and the Stimulus handler removing the signal node once consumed.
+
+**Notes**
+- Only one Rails application can exist per process, so the system specs run as
+  their own process (`rake spec:system`, excluded from bare `rspec` via `.rspec`)
+  while the rack-test app keeps serving the request specs. Coverage is written to
+  separate directories and the 100% gate applies to the unit run only.
+- One assertion of mine overreached and had to be corrected rather than the code:
+  "the asset token never appears in the browser" is false by design — it is
+  embedded in `frame_url`, which is how the hosted renderer authenticates the
+  frame (decision #009). The spec now asserts what the blocking path asserts: no
+  bare `asset_token` field, and the token present only inside the frame URL.
+
+**Verification**
+- Unit + request suite: 333 examples, 100% line + branch, RuboCop clean.
+- System suite: 17 examples, 0 failures. It is slow — Chrome launches per example
+  — so it is deliberately kept out of the default `rspec` run.
+
 ## 2026-07-31 — Phase 7: Railtie security checks (boot guards + leak audit)
 
 **Done**

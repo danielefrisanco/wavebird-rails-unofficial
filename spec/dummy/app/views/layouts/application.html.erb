@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>wavebird dummy host</title>
+    <%= csrf_meta_tags %>
+
+    <%#
+      Importmap over plain ES modules — no bundler, no build step. This is the
+      importmap setup INSTALL.md documents, so the system tests exercise the
+      documented integration path rather than a test-only arrangement.
+    %>
+    <script type="importmap">
+      {
+        "imports": {
+          "@hotwired/stimulus": "/stimulus-js/stimulus.js",
+          "@hotwired/turbo-rails": "/turbo-js/turbo.js",
+          "controllers/wavebird_controller": "/wavebird-js/controllers/wavebird_controller.js",
+          "wavebird": "/wavebird-js/wavebird/index.js"
+        }
+      }
+    </script>
+
+
+    <script type="module">
+      import { Application } from "@hotwired/stimulus";
+      import "@hotwired/turbo-rails";
+      import { registerWavebirdControllers } from "wavebird";
+
+      const application = Application.start();
+      registerWavebirdControllers(application);
+
+      // Signals readiness to Capybara, which waits on this before interacting.
+      window.__dummyReady = true;
+    </script>
+  </head>
+
+  <body>
+    <%= yield %>
+  </body>
+</html>

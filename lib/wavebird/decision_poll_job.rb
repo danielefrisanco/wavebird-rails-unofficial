@@ -44,12 +44,22 @@ module Wavebird
     def broadcast(stream_name, decision)
       return unless defined?(Turbo::StreamsChannel)
 
-      Turbo::StreamsChannel.broadcast_replace_to(
+      # Appended *into* the slot <section>, not replacing an element of its own:
+      # the signal has to land inside the controller's element for Stimulus to
+      # see it as a target, and `append` works whether or not an earlier signal
+      # is present (a `replace` against a missing target is a silent no-op).
+      Turbo::StreamsChannel.broadcast_append_to(
         stream_name,
-        target: stream_name,
+        target: SlotPayload.slot_dom_id(position_from(stream_name)),
         partial: "wavebird/slot_broadcast",
         locals: { stream_name: stream_name, payload: SlotPayload.call(decision) }
       )
+    end
+
+    # The stream is named after the slot position (see SlotHelper#wavebird_slot),
+    # which is what the slot's DOM id is built from.
+    def position_from(stream_name)
+      stream_name.to_s.delete_prefix("wavebird_slot_")
     end
   end
 end

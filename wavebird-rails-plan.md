@@ -264,26 +264,53 @@ second (`Rails.app_class` takeover). The non-raising path is exercised for real 
 that harness booting with the gem loaded. A true subprocess boot-raise test can
 come with Phase 8's `spec/dummy`.
 
-## Phase 8 — System tests (dummy app + Capybara)
+## Phase 8 — System tests (dummy app + Capybara) — **done**
 
-- [ ] Minimal dummy Rails app under `spec/dummy/` with a chat page using the
-  helpers, a registered `wavebird` Stimulus controller (Phase 6a), and a JS
-  bundle Capybara can drive (this is where `rspec-rails` + Capybara + a real
-  asset build first enter the suite — Phases 5–6 used only rack-test).
-- [ ] **Phase 6a paths** — Capybara + mocked `/v1/placements`, both host entry
-  points from decision #008: **path A** (dispatch `wavebird:turn` with `detail.work`)
-  and **path C** (call `window.wavebird.withTurn('#wavebird-slot-below', work)`
-  directly). fill → slot section revealed; no-fill → frame stays hidden and chat
-  flow proceeds; wavebird API down / render.js fails to load → chat turn still
-  runs unwrapped and is unaffected; `session_id` from the helper value reaches the
-  request body on path A.
-- [ ] **Phase 6b path** — async mode: mocked `/v1/jobs` + `/v1/decisions/{slot_id}`
-  → job runs → Turbo Stream broadcast fills the slot; no-fill broadcast removes it;
-  job failure leaves chat flow untouched; no ActionCable configured → degrades to
-  the blocking default.
-- [ ] SimpleCov: 100% on `lib/wavebird/*` (per §6), enforced in CI. (JS lifecycle
-  is exercised through Capybara, not line-covered; any pure JS helper extracted in
-  Phase 6 gets a unit test.)
+- [x] Dummy Rails app under `spec/dummy/` — a real host app (routes, session
+  store, Turbo Streams over ActionCable) with a chat page using the helpers and a
+  registered `wavebird` Stimulus controller. **No JS build step:** an importmap
+  serves ES modules straight from where they live (the gem's own `app/javascript`
+  and the stimulus/turbo gems, via `JsServer`), so nothing is vendored, copied or
+  symlinked and the specs load the exact files the gem ships. `rspec-rails` +
+  Capybara + headless Chrome enter the suite here.
+- [x] **Phase 6a paths** — both host entry points from decision #008, each across
+  fill (slot revealed, frame mounted), no-fill (stays hidden, chat proceeds),
+  wavebird API down, and render.js never loading (turn runs unwrapped); plus
+  `session_id` propagation and secret-key exclusion. 12 examples.
+- [x] **Phase 6b path** — async mode end to end over a *real* cable: mocked
+  `/v1/jobs` + `/v1/decisions/{slot_id}` → endpoint answers `{pending: true}` →
+  `DecisionPollJob` → genuine `Turbo::StreamsChannel` broadcast → Stimulus
+  `signalTargetConnected` → `renderPlacement`. Fill reveals, no-fill stays hidden,
+  a failing poll leaves the chat flow untouched, and the token boundary holds.
+  5 examples.
+- [x] `spec/wavebird/render_js_contract_spec.rb` keeps the local render.js
+  stand-in honest against the dated upstream snapshot, so refreshing the snapshot
+  fails loudly instead of silently invalidating every system test.
+- [x] SimpleCov: 100% line + branch on `lib/wavebird/*` (per §6), enforced by the
+  unit + request suite. The system specs run as their own process with the gate
+  off — they drive the browser, not `lib/` — so the two coverage runs are written
+  to separate directories.
+- [x] CI: a dedicated `system` job (Ruby 3.4 + Chrome/chromedriver) running
+  `rake spec:system`, split from the unit matrix because it needs a browser.
+
+**Two bugs this phase caught** (neither visible to unit tests):
+1. **Async mode was unreachable from the browser.** The helper rendered the Turbo
+   Stream subscription, but nothing told the endpoint to use async — the Stimulus
+   controller never sent `mode`/`stream_name`, so every async slot silently fell
+   back to blocking. Fixed: the helper emits the values, the controller forwards
+   them (with the position hint) in the request body.
+2. **The broadcast never reached the DOM.** `DecisionPollJob` used
+   `broadcast_replace_to` against a target named after the *stream*
+   (`wavebird_slot_below`), which no element on the page had — and a Turbo Stream
+   `replace` against a missing target is a silent no-op. Fixed: `broadcast_append_to`
+   into the slot `<section>` itself (`SlotPayload.slot_dom_id`, now the single
+   source of that id for both helper and job), and the Stimulus handler removes
+   the signal node once consumed so repeated broadcasts cannot stack.
+
+**Test-layout constraint:** only one Rails application can exist per process, so
+the system specs run as their own process (`rake spec:system`, excluded from bare
+`rspec` via `.rspec`) while the rack-test app keeps serving the request specs.
+`rake` runs both, then RuboCop.
 
 **Gate:** full matrix CI green.
 

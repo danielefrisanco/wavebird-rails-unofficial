@@ -38,6 +38,11 @@ module WavebirdSpec
 end
 
 # Boot once for the whole suite.
+#
+# Only one Rails application can exist per process, so this rack-test app and the
+# full spec/dummy host app used by the system specs are mutually exclusive. The
+# system specs therefore run in their own process (`rake spec:system`); when they
+# are the target this file must not claim Rails.application first.
 WavebirdSpec::Application.initialize! unless WavebirdSpec::Application.initialized?
 
 # Shared context for engine request specs: gives examples the mounted Rack app

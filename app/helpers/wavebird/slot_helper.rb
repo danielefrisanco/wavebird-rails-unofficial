@@ -47,22 +47,31 @@ module Wavebird
     # @return [ActiveSupport::SafeBuffer]
     def wavebird_slot(endpoint:, session_id: nil, position: "below", async: false, **html_options)
       stream = "wavebird_slot_#{position}"
-      data = {
-        controller: "wavebird",
-        wavebird_endpoint: endpoint,
-        wavebird_session_id_value: session_id,
-        wavebird_position_value: position
-      }.compact
-
       section = content_tag(:section, "",
-                            { id: "wavebird-slot-#{position}", hidden: true,
-                              data: data }.merge(html_options))
+                            { id: SlotPayload.slot_dom_id(position), hidden: true,
+                              data: wavebird_slot_data(endpoint:, session_id:, position:, stream:,
+                                                       async:) }.merge(html_options))
       return section unless async
 
       safe_join([wavebird_stream_subscription(stream), section].compact)
     end
 
     private
+
+    # Stimulus hook plus the values the controller reads. The async pair tells it
+    # to request async delivery and names the stream the decision is broadcast
+    # on, so the endpoint knows where to send it; both are omitted entirely in
+    # the blocking default.
+    def wavebird_slot_data(endpoint:, session_id:, position:, stream:, async:)
+      {
+        controller: "wavebird",
+        wavebird_endpoint: endpoint,
+        wavebird_session_id_value: session_id,
+        wavebird_position_value: position,
+        wavebird_mode_value: ("async" if async),
+        wavebird_stream_name_value: (stream if async)
+      }.compact
+    end
 
     # Turbo Stream subscription for the slot, or +nil+ when turbo-rails is not
     # loaded (async mode is optional; the caller degrades to the blocking path).

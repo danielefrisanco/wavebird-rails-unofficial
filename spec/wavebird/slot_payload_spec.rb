@@ -90,6 +90,21 @@ RSpec.describe Wavebird::SlotPayload do
     end
   end
 
+  describe ".slot_dom_id" do
+    it "builds the slot's DOM id from the position" do
+      expect(described_class.slot_dom_id("below")).to eq("wavebird-slot-below")
+    end
+
+    it "is the id the view helper renders, so broadcasts can target it" do
+      view = ActionView::Base.with_empty_template_cache
+                             .new(ActionView::LookupContext.new([]), {}, nil)
+                             .tap { |v| v.extend(Wavebird::SlotHelper) }
+
+      expect(view.wavebird_slot(endpoint: "/e", position: "sidebar"))
+        .to include(%(id="#{described_class.slot_dom_id('sidebar')}"))
+    end
+  end
+
   describe "on no-fill" do
     it "returns { fill: false } for a no-fill placement response" do
       response = Wavebird::Types::PlacementResponse.from_api(

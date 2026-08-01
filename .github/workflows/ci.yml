@@ -20,12 +20,33 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake spec
 
+  # Capybara system specs: a real spec/dummy host app driven through headless
+  # Chrome. Split from `test` because it needs a browser and runs as its own
+  # process (only one Rails application can exist per process).
+  system:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      # ubuntu-latest ships Chrome and a matching chromedriver; pin the driver so
+      # Selenium does not pick a mismatched one off PATH.
+      - id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          install-chromedriver: true
+      - run: bundle exec rake spec:system
+        env:
+          CHROMEDRIVER_PATH: ${{ steps.setup-chrome.outputs.chromedriver-path }}
+
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          ruby-version: "3.4"
           bundler-cache: true
       - run: bundle exec rake rubocop
