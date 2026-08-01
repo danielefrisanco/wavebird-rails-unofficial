@@ -40,9 +40,9 @@ RSpec.describe Wavebird::DecisionPollJob do
     it "broadcasts a reveal to the slot's stream with the browser-safe payload" do
       perform(decision)
 
-      expect(channel).to have_received(:broadcast_replace_to).with(
+      expect(channel).to have_received(:broadcast_append_to).with(
         stream,
-        hash_including(target: stream, partial: "wavebird/slot_broadcast",
+        hash_including(target: "wavebird-slot-below", partial: "wavebird/slot_broadcast",
                        locals: hash_including(payload: hash_including(fill: true)))
       )
     end
@@ -51,7 +51,7 @@ RSpec.describe Wavebird::DecisionPollJob do
       perform(decision)
 
       payload = nil
-      expect(channel).to have_received(:broadcast_replace_to) do |_stream, opts|
+      expect(channel).to have_received(:broadcast_append_to) do |_stream, opts|
         payload = opts[:locals][:payload]
       end
       expect(payload).not_to have_key(:asset_token)
@@ -63,7 +63,7 @@ RSpec.describe Wavebird::DecisionPollJob do
     it "broadcasts a hide payload" do
       perform(Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false))
 
-      expect(channel).to have_received(:broadcast_replace_to).with(
+      expect(channel).to have_received(:broadcast_append_to).with(
         stream, hash_including(locals: hash_including(payload: { fill: false }))
       )
     end
@@ -78,6 +78,20 @@ RSpec.describe Wavebird::DecisionPollJob do
 
       expect { described_class.new.perform("slot_1", stream) }.not_to raise_error
     end
+  end
+
+  it "targets the slot section derived from the stream name" do
+    # The broadcast must land inside the controller's element for Stimulus to see
+    # the signal target; a stream named for a non-default position must resolve
+    # to that position's section.
+    allow(facade).to receive(:await_decision).and_return(
+      Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false)
+    )
+
+    described_class.new.perform("slot_1", "wavebird_slot_sidebar")
+
+    expect(channel).to have_received(:broadcast_append_to)
+      .with("wavebird_slot_sidebar", hash_including(target: "wavebird-slot-sidebar"))
   end
 
   it "reads the configured async queue name" do

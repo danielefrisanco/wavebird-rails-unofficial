@@ -27,6 +27,16 @@ module Wavebird
 
     RENDER_PATH = "/v1/render"
 
+    # DOM id of a slot's <section>, shared by the view helper (which renders it)
+    # and {DecisionPollJob} (which targets it when broadcasting), so the two can
+    # never drift apart.
+    #
+    # @param position [String] slot position hint
+    # @return [String]
+    def slot_dom_id(position)
+      "wavebird-slot-#{position}"
+    end
+
     # @param source [Types::PlacementResponse, Types::Decision] a fill/no-fill
     #   carrier responding to +fill?+
     # @return [Hash] +{ fill: false }+ or the browser-safe render fields

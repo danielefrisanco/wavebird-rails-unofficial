@@ -19,6 +19,34 @@ RSpec.describe "Sponsor slot — async delivery", type: :system do
     perform_enqueued_jobs
   end
 
+  # `src` of the iframe the hosted renderer mounted, or nil if none.
+  def rendered_frame_src
+    page.evaluate_script(<<~JS)
+      (() => {
+        const frame = document.querySelector("iframe[data-wavebird-frame]");
+        return frame ? frame.src : null;
+      })()
+    JS
+  end
+
+  # Everything the browser actually received inside the page body — the place a
+  # leaked token or key would show up.
+  def slot_dom
+    page.evaluate_script("document.body.innerHTML")
+  end
+
+  # Drives a full async turn: load the page, take the turn, run the poll job, and
+  # wait for the broadcast to reveal the slot.
+  def take_a_turn_and_reveal
+    visit "/chat/async"
+    wait_for_dummy_ready
+    wait_for_stream_subscription
+    click_button(id: "send-path-a")
+    expect(page).to have_text("AI answered")
+    run_poll_job
+    expect(page).to have_css("#wavebird-slot-below[data-wavebird-status='rendered']")
+  end
+
   it "answers the browser immediately without waiting for a decision" do
     stub_job
     stub_request(:get, %r{/v1/decisions/slot_1})
@@ -90,23 +118,21 @@ RSpec.describe "Sponsor slot — async delivery", type: :system do
     expect(page).to have_no_css("iframe[data-wavebird-frame]", visible: :all)
   end
 
-  it "never sends the asset token to the browser" do
+  it "sends no bare asset token and no secret key to the browser", :aggregate_failures do
     stub_job
     stub_request(:get, %r{/v1/decisions/slot_1})
       .to_return(status: 200, body: JSON.generate(ready_fill_decision),
                  headers: { "Content-Type" => "application/json" })
 
-    visit "/chat/async"
-    wait_for_dummy_ready
-    wait_for_stream_subscription
-    click_button(id: "send-path-a")
-    expect(page).to have_text("AI answered")
-    run_poll_job
-    expect(page).to have_css("#wavebird-slot-below[data-wavebird-status='rendered']")
+    take_a_turn_and_reveal
 
-    # The server folds the token into frame_url (decision #009); the bare token
-    # must appear nowhere in the delivered DOM.
-    expect(page.html).not_to include("at_secret_async")
+    # The server folds the token into frame_url (decision #009) — that one
+    # embedding is by design, since the hosted renderer authenticates the frame
+    # with it. What must never appear is the token as a value of its own, or the
+    # secret key in any form. Same boundary the blocking path asserts.
+    expect(rendered_frame_src).to eq("#{api_base_url}/v1/render/at_secret_async")
+    expect(slot_dom).not_to include("asset_token")
+    expect(slot_dom.scan("at_secret_async").size).to eq(1) # the iframe src only
     expect(page.html).not_to include("sk_test")
   end
 

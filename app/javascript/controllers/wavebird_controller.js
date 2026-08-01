@@ -74,6 +74,11 @@ export default class extends Controller {
       payload = { fill: false };
     }
 
+    // The signal is data, not content: consume it so repeated broadcasts cannot
+    // stack up inside the slot, and so the renderer owns the element's contents
+    // exactly as it does on the synchronous path.
+    el.remove();
+
     const wavebird = typeof window !== "undefined" ? window.wavebird : null;
     if (!wavebird) return; // render.js not loaded yet; slot simply stays hidden
 

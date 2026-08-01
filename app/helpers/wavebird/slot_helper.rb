@@ -48,7 +48,7 @@ module Wavebird
     def wavebird_slot(endpoint:, session_id: nil, position: "below", async: false, **html_options)
       stream = "wavebird_slot_#{position}"
       section = content_tag(:section, "",
-                            { id: "wavebird-slot-#{position}", hidden: true,
+                            { id: SlotPayload.slot_dom_id(position), hidden: true,
                               data: wavebird_slot_data(endpoint:, session_id:, position:, stream:,
                                                        async:) }.merge(html_options))
       return section unless async
