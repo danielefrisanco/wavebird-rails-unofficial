@@ -189,7 +189,10 @@ missing, the endpoint logs a warning and transparently falls back to the
 synchronous path — the slot still fills, so nothing breaks.
 
 To enable it, render the slot with `async: true` (which also subscribes it to its
-Turbo Stream) and post `mode: "async"` from your turn:
+Turbo Stream). **A `session_id:` is required in async mode** — the stream is
+scoped to it, so that a decision is delivered only to the visitor it belongs to
+rather than to everyone viewing that slot position. Rendering an async slot
+without one raises `ArgumentError`.
 
 ```erb
 <%= wavebird_render_script_tag %>

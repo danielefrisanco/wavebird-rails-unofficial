@@ -136,6 +136,70 @@ RSpec.describe "Sponsor slot — async delivery", type: :system do
     expect(page.html).not_to include("sk_test")
   end
 
+  # The bug this exists to prevent: the Turbo Stream used to be named for the slot
+  # position alone, so every visitor at that position shared one channel. One
+  # visitor's decision — including the frame_url that embeds their asset_token —
+  # was broadcast to all of them, rendering their ad in strangers' pages and
+  # firing their beacons from unrelated browsers.
+  #
+  # Single-session specs cannot see this: the leak only appears with a second
+  # concurrent visitor, which is why it survived Phase 8.
+  describe "with two concurrent visitors" do
+    # rubocop:disable RSpec/ExampleLength -- two browser sessions have to be
+    # driven in one example: the leak only exists *between* them, and splitting
+    # would pay for a second browser boot to assert half of one scenario.
+    it "delivers a decision only to the visitor it belongs to", :aggregate_failures do
+      stub_job
+      stub_request(:get, %r{/v1/decisions/slot_1})
+        .to_return(status: 200, body: JSON.generate(ready_fill_decision),
+                   headers: { "Content-Type" => "application/json" })
+
+      # Two Capybara sessions = two cookie jars = two wavebird_session_ids, so
+      # each subscribes to its own stream.
+      visitor_b_stream = nil
+      Capybara.using_session(:visitor_b) do
+        visit "/chat/async"
+        wait_for_dummy_ready
+        wait_for_stream_subscription
+        visitor_b_stream = stream_source_names
+      end
+
+      visit "/chat/async"
+      wait_for_dummy_ready
+      wait_for_stream_subscription
+      visitor_a_stream = stream_source_names
+
+      # Precondition: the two visitors really are on different streams.
+      expect(visitor_a_stream).not_to be_empty
+      expect(visitor_a_stream).not_to eq(visitor_b_stream)
+
+      # Visitor A takes a turn; only A's decision is broadcast.
+      click_button(id: "send-path-a")
+      expect(page).to have_text("AI answered")
+      run_poll_job
+
+      expect(page).to have_css("#wavebird-slot-below[data-wavebird-status='rendered']")
+
+      Capybara.using_session(:visitor_b) do
+        # B never took a turn, so B's slot must stay hidden and empty — no frame,
+        # and no trace of A's asset token anywhere in B's page.
+        expect(page).to have_no_css("iframe[data-wavebird-frame]", visible: :all)
+        expect(slot).not_to be_visible
+        expect(page.evaluate_script("document.body.innerHTML")).not_to include("at_secret_async")
+      end
+    end
+    # rubocop:enable RSpec/ExampleLength
+  end
+
+  # The signed stream names the page is subscribed to. Two visitors on the same
+  # position must not share one.
+  def stream_source_names
+    page.evaluate_script(<<~JS)
+      Array.from(document.querySelectorAll("turbo-cable-stream-source"))
+           .map((el) => el.getAttribute("signed-stream-name"))
+    JS
+  end
+
   # A ready fill decision as returned by GET /v1/decisions/{slot_id}: it carries
   # the raw asset_token and a creative, not a resolved frame_url.
   def ready_fill_decision

@@ -198,6 +198,7 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 | `default_slot_hint` | `nil` | e.g. `{ position: "below", max_width: 728, max_height: 90 }` |
 | `default_overrides` | `nil` | e.g. `{ allowed_formats: %w[banner native], timing: "during" }` |
 | `default_publisher` | `nil` | merged into `overrides.publisher` |
+| `default_consent` | `nil` | consent sent by the engine endpoint, which does not accept it from the browser |
 | `on_error` | `nil` | callable; receives every swallowed error |
 | `logger` | `nil` | warnings only; never receives secrets or asset tokens |
 | `async_queue_name` | `:default` | queue for `DecisionPollJob` |
@@ -285,8 +286,18 @@ Use `consent_source: "publisher_custom"` when the consent came from your own UI.
 `"wavebird_consent"` means the user answered wavebird's own consent dialog — the
 gem never renders one, so claiming it would misstate where the consent came from.
 
-Two notes on delivery mode: the browser endpoint forwards a `consent` object your
-JavaScript posts to it, and the canonical `POST /v1/jobs` route used by **async
+For the **engine endpoint**, set them server-side — it deliberately does not
+accept `consent` (or `overrides`) from the browser, since a page must not be able
+to assert consent on a user's behalf or undo your brand-safety settings:
+
+```ruby
+Wavebird.configure do |c|
+  c.default_consent   = { semantic_targeting: false, consent_source: "publisher_custom" }
+  c.default_overrides = { blocked_categories: %w[gambling] }
+end
+```
+
+One limit worth knowing: the canonical `POST /v1/jobs` route used by **async
 mode** can only carry `gdpr_applies` (upstream folds it into `overrides`). Other
 flags are logged and skipped there; send them through the blocking path, whose
 `/v1/placements` body takes the full object.

@@ -17,7 +17,7 @@ its legacy wrapper transport (`/public/wrapper/v1/*`).
 |---|---|---|---|
 | `baseUrl` (HTTPS enforced except localhost) | `config.api_base_url` | port | Mirror the HTTPS-except-localhost validation |
 | `getApiKey` (callable, read per request) | `config.secret_key` static + optional callable support | port (adapted) | Accept a `Proc` for rotation parity |
-| `decisionDelivery` (`auto\|ws\|polling\|callback`) | polling only in v1, surfaced as opt-in async mode (`mode: "async"`) — non-blocking `create_job` → `DecisionPollJob` long-poll → Turbo Stream reveal | adapt | Decision #001 (transport) + #009 (reveal keeps asset_token server-side) + #010 (ActiveJob/ActionCable optional, graceful fallback); `callback` mode not ported (needs public callback URL — see open Q3) |
+| `decisionDelivery` (`auto\|ws\|polling\|callback`) | polling only in v1, surfaced as opt-in async mode (`mode: "async"`) — non-blocking `create_job` → `DecisionPollJob` long-poll → Turbo Stream reveal | adapt | Decision #001 (transport) + #009 (reveal keeps asset_token server-side) + #010 (ActiveJob/ActionCable optional, graceful fallback) + **#015 (the reveal stream is scoped per session, matching upstream's per-slot WebSocket, which is scoped to one caller by construction — a per-position stream would be shared by every visitor)**; `callback` mode not ported (needs public callback URL — see open Q3) |
 | `publisher` default metadata | `config.default_publisher` | port | Merged into every job unless overridden |
 | `options.timeout_ms` (default 2000, clamp 250..30000) | `config.timeout_ms` | port | Same default + clamp |
 | `options.decision_timeout_ms` (default 30000, clamp 1000..60000) | `config.decision_timeout_ms` | port | Governs total poll budget — required by #001 |

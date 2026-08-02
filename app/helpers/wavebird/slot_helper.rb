@@ -45,11 +45,14 @@ module Wavebird
     # @param async [Boolean] subscribe the slot to its Turbo Stream for async mode
     # @param html_options [Hash] extra HTML attributes merged onto the section
     # @return [ActiveSupport::SafeBuffer]
+    # @raise [ArgumentError] when +async: true+ without a +session_id+ — the
+    #   stream is scoped to the session, and an unscoped one would deliver this
+    #   visitor's decision to every other visitor (see {SlotPayload.stream_name})
     def wavebird_slot(endpoint:, session_id: nil, position: "below", async: false, **html_options)
-      stream = "wavebird_slot_#{position}"
+      stream = (SlotPayload.stream_name(position, session_id) if async)
       section = content_tag(:section, "",
                             { id: SlotPayload.slot_dom_id(position), hidden: true,
-                              data: wavebird_slot_data(endpoint:, session_id:, position:, stream:,
+                              data: wavebird_slot_data(endpoint:, session_id:, position:,
                                                        async:) }.merge(html_options))
       return section unless async
 
@@ -58,18 +61,20 @@ module Wavebird
 
     private
 
-    # Stimulus hook plus the values the controller reads. The async pair tells it
-    # to request async delivery and names the stream the decision is broadcast
-    # on, so the endpoint knows where to send it; both are omitted entirely in
-    # the blocking default.
-    def wavebird_slot_data(endpoint:, session_id:, position:, stream:, async:)
+    # Stimulus hook plus the values the controller reads. +mode+ asks the endpoint
+    # for async delivery and is omitted in the blocking default.
+    #
+    # The stream name is deliberately **not** among these. It is derived
+    # server-side on both ends from position + session id
+    # ({SlotPayload.stream_name}); sending it to the browser and back would let a
+    # client choose which stream the server broadcasts onto.
+    def wavebird_slot_data(endpoint:, session_id:, position:, async:)
       {
         controller: "wavebird",
         wavebird_endpoint: endpoint,
         wavebird_session_id_value: session_id,
         wavebird_position_value: position,
-        wavebird_mode_value: ("async" if async),
-        wavebird_stream_name_value: (stream if async)
+        wavebird_mode_value: ("async" if async)
       }.compact
     end
 

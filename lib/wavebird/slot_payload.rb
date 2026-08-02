@@ -39,6 +39,30 @@ module Wavebird
       "wavebird-slot-#{position}"
     end
 
+    # Turbo Stream a slot's async decision is delivered on, derived identically
+    # by the view helper (which subscribes) and the endpoint (which broadcasts).
+    #
+    # **Scoped to the session, never to the position alone.** Upstream's decision
+    # transport is a per-slot WebSocket — ticket, one message, close — so it is
+    # scoped to a single caller by construction. A stream named only for the
+    # position would be shared by every visitor rendering that position, and one
+    # visitor's decision (including the +frame_url+ that embeds their
+    # +asset_token+) would be broadcast to all of them, firing their beacons from
+    # unrelated browsers. The session id restores upstream's per-caller scope.
+    #
+    # @param position [String] slot position hint
+    # @param session_id [String] the slot's anonymous session id
+    # @return [String]
+    # @raise [ArgumentError] when +session_id+ is blank — an unscoped stream is a
+    #   cross-session leak, so this fails loudly rather than degrading quietly
+    def stream_name(position, session_id)
+      token = session_id.to_s.strip
+      raise ArgumentError, "wavebird async delivery requires a session_id (the Turbo Stream is scoped to it)" if
+        token.empty?
+
+      "wavebird_slot_#{position}_#{token}"
+    end
+
     # @param source [Types::PlacementResponse, Types::Decision] a fill/no-fill
     #   carrier responding to +fill?+
     # @return [Hash] +{ fill: false }+ or the browser-safe render fields

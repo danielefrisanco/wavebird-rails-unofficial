@@ -49,9 +49,39 @@ Reverse chronological. Each entry: done / todo / problems found.
   local bundle until `bundle install` restored it. The per-Rails gemfiles avoid
   this — each keeps its own lockfile and shares the default gem path.
 
+**Security review (manual — the skill needs `origin/HEAD` and there is no remote)**
+
+Three findings, all fixed under decision #015:
+
+1. **High — async broadcast every user's placement to every user.** The Turbo
+   Stream was named `wavebird_slot_{position}` on both ends, so all visitors at a
+   position shared one channel: one visitor's decision, `frame_url` and embedded
+   `asset_token` included, reached every other subscriber, mounting their ad and
+   firing their beacons from unrelated browsers. Fixed by scoping the name to the
+   session in one shared place (`SlotPayload.stream_name`) — which is also what
+   upstream does, since its decision transport is a *per-slot* WebSocket.
+2. **Medium — the broadcast target came from the client.** `stream_name` was read
+   from params and passed to `broadcast_append_to`; Turbo signs stream names when
+   subscribing but not when broadcasting. It is no longer a param, a Stimulus
+   value, or part of the request body; the job takes `position` explicitly.
+3. **Medium — browser-supplied `overrides`/`consent` beat server config.** A page
+   could clear `blocked_categories`, zero a `bidfloor`, or claim
+   `semantic_targeting: true`. Both dropped from permitted params; `overrides`
+   now comes from config and consent from the new `config.default_consent`
+   (still `nil` by default, so #013 stands).
+
+Clean: secret-key handling (read only in `require_secret_key`, only ever the
+`Authorization` header, redacted in `inspect`, absent from instrumentation), the
+broadcast partial (escapes, no `raw`, no inline `<script>`).
+
+**The regression test was verified against the vulnerable code.** With the
+session scoping reverted, the new two-session spec fails on all four assertions —
+including visitor B's page containing visitor A's `at_secret_async` token. That
+is the leak, reproduced, and it is why a single-session suite never saw it.
+
 **Todo**
-- `/code-review` and `/security-review` are user-triggered and billed — Daniele
-  runs them; findings come back into this phase.
+- `/code-review` is user-triggered and billed — Daniele runs it; findings come
+  back into this phase.
 - `gem install pkg/*.gem` into a fresh `rails new` app → Phase 11.
 - Sandbox smoke test still blocked on `sk_test_...` credentials.
 

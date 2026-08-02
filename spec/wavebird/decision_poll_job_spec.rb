@@ -4,7 +4,7 @@ require "wavebird/decision_poll_job"
 
 RSpec.describe Wavebird::DecisionPollJob do
   let(:facade) { instance_double(Wavebird::Facade) }
-  let(:stream) { "wavebird_slot_below" }
+  let(:stream) { "wavebird_slot_below_sess_1" }
   # A stand-in Turbo::StreamsChannel that records the broadcast arguments, so the
   # test does not need turbo-rails/ActionCable wired.
   let(:channel) { spy("Turbo::StreamsChannel") } # rubocop:disable RSpec/VerifiedDoubles
@@ -19,7 +19,7 @@ RSpec.describe Wavebird::DecisionPollJob do
 
   def perform(decision)
     allow(facade).to receive(:await_decision).with("slot_1").and_return(decision)
-    described_class.new.perform("slot_1", stream)
+    described_class.new.perform("slot_1", stream, "below")
   end
 
   it "polls the slot through the fail-silent facade" do
@@ -76,22 +76,35 @@ RSpec.describe Wavebird::DecisionPollJob do
         Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false)
       )
 
-      expect { described_class.new.perform("slot_1", stream) }.not_to raise_error
+      expect { described_class.new.perform("slot_1", stream, "below") }.not_to raise_error
     end
   end
 
-  it "targets the slot section derived from the stream name" do
+  it "targets the slot section for the position it was given" do
     # The broadcast must land inside the controller's element for Stimulus to see
-    # the signal target; a stream named for a non-default position must resolve
-    # to that position's section.
+    # the signal target. Position is passed explicitly rather than parsed back out
+    # of the stream name, which is now session-scoped and no longer decomposable.
     allow(facade).to receive(:await_decision).and_return(
       Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false)
     )
 
-    described_class.new.perform("slot_1", "wavebird_slot_sidebar")
+    described_class.new.perform("slot_1", "wavebird_slot_sidebar_sess_9", "sidebar")
 
     expect(channel).to have_received(:broadcast_append_to)
-      .with("wavebird_slot_sidebar", hash_including(target: "wavebird-slot-sidebar"))
+      .with("wavebird_slot_sidebar_sess_9", hash_including(target: "wavebird-slot-sidebar"))
+  end
+
+  # The whole point of the session scoping: two visitors at the same position get
+  # different streams, so one visitor's decision cannot land in the other's page.
+  it "broadcasts onto the session-scoped stream it was given, not a shared one" do
+    allow(facade).to receive(:await_decision).and_return(
+      Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false)
+    )
+
+    described_class.new.perform("slot_1", "wavebird_slot_below_sess_a", "below")
+
+    expect(channel).to have_received(:broadcast_append_to).with("wavebird_slot_below_sess_a", anything)
+    expect(channel).not_to have_received(:broadcast_append_to).with("wavebird_slot_below", anything)
   end
 
   it "reads the configured async queue name" do

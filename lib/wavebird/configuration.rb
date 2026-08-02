@@ -50,6 +50,16 @@ module Wavebird
     #   overridden per call (parity with upstream +publisher+ option)
     attr_accessor :default_publisher
 
+    # Consent flags sent by {SponsorSlotsController}, which does not accept them
+    # from the browser — a page must not be able to assert consent on a user's
+    # behalf. Defaults to +nil+: like the upstream SDK, the gem sends no consent
+    # object unless you supply one (decision #013). Hosts with a CMP set it here,
+    # e.g. +{ semantic_targeting: false, prompt_shared: false,
+    # consent_source: "publisher_custom" }+.
+    #
+    # @return [Hash, nil]
+    attr_accessor :default_consent
+
     # @return [#call, nil] observer invoked with a {Wavebird::Error} for
     #   failures swallowed by the fail-silent Rails-facing layer (parity with
     #   upstream +onError+)
@@ -77,6 +87,7 @@ module Wavebird
       @default_slot_hint = nil
       @default_overrides = nil
       @default_publisher = nil
+      @default_consent = nil
       @on_error = nil
       @logger = nil
       @wrapper_version = "wavebird-rails/#{VERSION}"

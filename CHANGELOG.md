@@ -78,6 +78,16 @@ wavebird's canonical REST v1 API.
 
 #### Security
 
+- Async decision streams are **scoped to the session**, not to the slot position.
+  A position-only stream is shared by every visitor rendering it, so one
+  visitor's decision — including the `frame_url` that embeds their `asset_token`
+  — would be delivered to all of them and fire their beacons from unrelated
+  browsers. `wavebird_slot(async: true)` now requires a `session_id`.
+- The sponsor-slot endpoint derives the broadcast stream server-side and no
+  longer accepts `stream_name`, `overrides` or `consent` from the browser: those
+  steer the auction or assert what wavebird may do with the request, and a page
+  is not a trusted source for either. Configure them with
+  `config.default_overrides` / `config.default_consent`.
 - `Wavebird::Railtie` + `Wavebird::BootCheck` — boot-time guards that raise
   `ConfigurationError` when the gem is required from a browser-reachable tree
   (`app/assets`, `app/javascript`), or when its server-side Ruby lands on the

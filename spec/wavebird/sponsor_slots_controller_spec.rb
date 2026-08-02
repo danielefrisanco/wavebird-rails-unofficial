@@ -148,6 +148,44 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
     end
   end
 
+  # The browser is not a trusted source for anything that steers the auction or
+  # asserts what wavebird may do with the request. A compromised or scripted page
+  # must not be able to undo the publisher's server-side configuration.
+  describe "POST /wavebird/sponsor_slot trust boundary", :aggregate_failures do
+    before { stub_placements.to_return(status: 200, body: JSON.generate(no_fill_response)) }
+
+    it "ignores browser-supplied overrides and keeps the configured ones" do
+      Wavebird.configure { |c| c.default_overrides = { blocked_categories: ["gambling"] } }
+
+      post_json("/wavebird/sponsor_slot", session_id: "sess_1",
+                                          overrides: { blocked_categories: [], bidfloor: 0 })
+
+      expect(a_request(:post, placements_url).with(query: hash_including({}),
+                                                   body: hash_including(
+                                                     "overrides" => { "blocked_categories" => ["gambling"] }
+                                                   ))).to have_been_made
+    end
+
+    it "ignores browser-supplied consent" do
+      post_json("/wavebird/sponsor_slot", session_id: "sess_1",
+                                          consent: { semantic_targeting: true })
+
+      expect(a_request(:post, placements_url)
+        .with(query: hash_including({}),
+              body: hash_including("consent" => anything))).not_to have_been_made
+    end
+
+    it "sends the consent the host configured server-side" do
+      Wavebird.configure { |c| c.default_consent = { semantic_targeting: false } }
+
+      post_json("/wavebird/sponsor_slot", session_id: "sess_1")
+
+      expect(a_request(:post, placements_url)
+        .with(query: hash_including({}),
+              body: hash_including("consent" => { "semantic_targeting" => false }))).to have_been_made
+    end
+  end
+
   describe "POST /wavebird/sponsor_slot in async mode" do
     context "when Turbo Streams is available and a job is created" do
       before do
@@ -160,7 +198,28 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
         post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async", position: "below")
 
         expect(json).to eq("pending" => true)
-        expect(Wavebird::DecisionPollJob).to have_received(:perform_later).with("slot_1", "wavebird_slot_below")
+        expect(Wavebird::DecisionPollJob)
+          .to have_received(:perform_later).with("slot_1", "wavebird_slot_below_sess_1", "below")
+      end
+
+      # The stream is derived server-side from position + session id. Taking it
+      # from params would let a client choose whose page its payload lands on.
+      it "ignores a stream_name supplied by the client" do
+        post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async", position: "below",
+                                            stream_name: "wavebird_slot_below_sess_victim")
+
+        expect(Wavebird::DecisionPollJob)
+          .to have_received(:perform_later).with("slot_1", "wavebird_slot_below_sess_1", "below")
+      end
+
+      it "scopes two visitors at the same position to different streams" do
+        post_json("/wavebird/sponsor_slot", session_id: "sess_a", mode: "async", position: "below")
+        post_json("/wavebird/sponsor_slot", session_id: "sess_b", mode: "async", position: "below")
+
+        expect(Wavebird::DecisionPollJob)
+          .to have_received(:perform_later).with("slot_1", "wavebird_slot_below_sess_a", "below")
+        expect(Wavebird::DecisionPollJob)
+          .to have_received(:perform_later).with("slot_1", "wavebird_slot_below_sess_b", "below")
       end
 
       it "does not call the blocking placements endpoint" do
@@ -172,13 +231,41 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
       # Async used to strip consent entirely, so the same host code sent a GDPR
       # flag in blocking mode and silently dropped it here. The canonical jobs
       # route carries it as overrides.gdpr_applies (upstream createV1JobRequest).
-      it "forwards the consent flag the canonical jobs route can carry" do
-        post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async",
-                                            consent: { gdpr_applies: true })
+      it "forwards the configured consent flag the canonical jobs route can carry" do
+        Wavebird.configure { |c| c.default_consent = { gdpr_applies: true } }
+
+        post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async")
 
         expect(a_request(:post, "https://api.wavebird.ai/v1/jobs")
           .with(query: hash_including({}),
                 body: hash_including("overrides" => { "gdpr_applies" => true }))).to have_been_made
+      end
+    end
+
+    # Without a session id the stream could only be named for the position, which
+    # is exactly the shared-channel bug. Blocking delivery needs no stream at all,
+    # so it degrades there rather than broadcasting to everyone.
+    context "when async is requested without a session id" do
+      before do
+        stub_const("Turbo::StreamsChannel", Class.new)
+        allow(Wavebird::DecisionPollJob).to receive(:perform_later)
+        stub_placements.to_return(status: 200, body: JSON.generate(no_fill_response))
+      end
+
+      it "falls back to the blocking path instead of using an unscoped stream" do
+        post_json("/wavebird/sponsor_slot", mode: "async", position: "below")
+
+        expect(json).to eq("fill" => false)
+        expect(Wavebird::DecisionPollJob).not_to have_received(:perform_later)
+      end
+
+      it "warns that the session id is what scopes the stream" do
+        logger = instance_double(Logger, warn: nil)
+        Wavebird.configure { |c| c.logger = logger }
+
+        post_json("/wavebird/sponsor_slot", mode: "async", position: "below")
+
+        expect(logger).to have_received(:warn).with(/without a session_id/)
       end
     end
 
