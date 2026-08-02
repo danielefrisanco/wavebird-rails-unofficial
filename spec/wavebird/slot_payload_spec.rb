@@ -105,6 +105,30 @@ RSpec.describe Wavebird::SlotPayload do
     end
   end
 
+  describe ".stream_name" do
+    it "scopes the stream to the session, not just the position" do
+      expect(described_class.stream_name("below", "sess_1")).to eq("wavebird_slot_below_sess_1")
+    end
+
+    it "gives two visitors at the same position different streams" do
+      expect(described_class.stream_name("below", "sess_a"))
+        .not_to eq(described_class.stream_name("below", "sess_b"))
+    end
+
+    # Callers are expected to check first — the view helper degrades to a blocking
+    # slot and the endpoint falls back to blocking (decision #016). This is the
+    # invariant behind both: there is no such thing as an unscoped stream, because
+    # one would be shared by every visitor at that position.
+    it "refuses to build an unscoped stream" do
+      expect { described_class.stream_name("below", nil) }
+        .to raise_error(ArgumentError, /requires a session_id/)
+    end
+
+    it "treats a blank session id as no session id" do
+      expect { described_class.stream_name("below", "   ") }.to raise_error(ArgumentError)
+    end
+  end
+
   describe "on no-fill" do
     it "returns { fill: false } for a no-fill placement response" do
       response = Wavebird::Types::PlacementResponse.from_api(

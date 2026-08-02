@@ -74,6 +74,18 @@ Clean: secret-key handling (read only in `require_secret_key`, only ever the
 `Authorization` header, redacted in `inspect`, absent from instrumentation), the
 broadcast partial (escapes, no `raw`, no inline `<script>`).
 
+**Correction, same day (#016):** the first cut had the view helper *raise* when
+`async: true` came without a `session_id`. Daniele pushed back — a raise inside
+`wavebird_slot` 500s the host's chat page, which is the one outcome the gem
+promises the ad path will never cause. He was right, and it was inconsistent
+too: the endpoint already warns and falls back for a missing Turbo/ActiveJob
+(#010). Checked upstream before changing rather than after: the SDK's callback
+mode throws `sdk_missing_callback_url`, but inside `createJob`'s own `try`, so
+the caller gets a reported error and `null` — `@throws Never`. Reported-and-
+degraded is upstream's posture; raising was mine. The helper now warns and
+renders a blocking slot. The security property is untouched, since it comes from
+the stream being scoped, and blocking mode has no stream at all.
+
 **The regression test was verified against the vulnerable code.** With the
 session scoping reverted, the new two-session spec fails on all four assertions —
 including visitor B's page containing visitor A's `at_secret_async` token. That

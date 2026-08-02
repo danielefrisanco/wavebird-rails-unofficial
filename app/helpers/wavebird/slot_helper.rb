@@ -43,12 +43,14 @@ module Wavebird
     #   (+wavebird.sponsor_slot_path+)
     # @param position [String] slot position hint, also used to build the id
     # @param async [Boolean] subscribe the slot to its Turbo Stream for async mode
+    # +async: true+ without a +session_id+ degrades to the blocking default with a
+    # warning (decision #016) — the slot still fills, and the host's page is never
+    # taken down by the ad path.
+    #
     # @param html_options [Hash] extra HTML attributes merged onto the section
     # @return [ActiveSupport::SafeBuffer]
-    # @raise [ArgumentError] when +async: true+ without a +session_id+ — the
-    #   stream is scoped to the session, and an unscoped one would deliver this
-    #   visitor's decision to every other visitor (see {SlotPayload.stream_name})
     def wavebird_slot(endpoint:, session_id: nil, position: "below", async: false, **html_options)
+      async &&= wavebird_async_deliverable?(session_id)
       stream = (SlotPayload.stream_name(position, session_id) if async)
       section = content_tag(:section, "",
                             { id: SlotPayload.slot_dom_id(position), hidden: true,
@@ -60,6 +62,28 @@ module Wavebird
     end
 
     private
+
+    # Async delivery needs a session id: the decision stream is scoped to it, and
+    # a stream scoped to the position alone would be shared by every visitor
+    # rendering that position (decision #015).
+    #
+    # Missing one degrades to the blocking default rather than raising. A raise
+    # here would 500 the host's chat page — the one outcome the gem promises the
+    # ad path will never cause — and upstream degrades in exactly this situation:
+    # its callback delivery mode throws +sdk_missing_callback_url+ when
+    # +callback_url+ is absent, but the throw happens inside +createJob+'s own
+    # +try+, so the caller gets a reported error and +null+, never an exception
+    # (+@throws Never+). Same posture as the endpoint's Turbo/ActiveJob fallback
+    # (decision #010).
+    def wavebird_async_deliverable?(session_id)
+      return true unless session_id.to_s.strip.empty?
+
+      Wavebird.configuration.logger&.warn(
+        "[wavebird] async mode needs a session_id (the decision stream is scoped to it); " \
+        "rendering a blocking slot instead. Pass session_id: to wavebird_slot to enable async."
+      )
+      false
+    end
 
     # Stimulus hook plus the values the controller reads. +mode+ asks the endpoint
     # for async delivery and is omitted in the blocking default.

@@ -109,9 +109,42 @@ RSpec.describe Wavebird::SlotHelper do
 
     # An unscoped stream is shared by every visitor at that position, so one
     # visitor's decision — frame_url and all — would be broadcast to all of them.
-    it "refuses to render an async slot without a session id" do
-      expect { view.wavebird_slot(endpoint: "/e", position: "below", async: true) }
-        .to raise_error(ArgumentError, /requires a session_id/)
+    # Without a session id there is nothing to scope to, so the slot degrades to
+    # the blocking default: no stream, nothing to leak, and the page still renders
+    # (raising here would 500 the host's chat page — decision #016).
+    describe "without a session id" do
+      it "renders a working blocking slot instead of raising" do
+        view.define_singleton_method(:turbo_stream_from) { |stream| stream.to_s.html_safe }
+
+        html = nil
+        expect { html = view.wavebird_slot(endpoint: "/e", position: "below", async: true) }
+          .not_to raise_error
+        expect(html).to include(%(id="wavebird-slot-below"))
+      end
+
+      it "emits no stream subscription and no async mode value" do
+        view.define_singleton_method(:turbo_stream_from) { |stream| stream.to_s.html_safe }
+
+        html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+        expect(html).not_to include("wavebird_slot_below")
+        expect(html).not_to include("data-wavebird-mode-value")
+      end
+
+      it "warns so the host learns why async did not engage" do
+        logger = instance_double(Logger, warn: nil)
+        Wavebird.configure { |c| c.logger = logger }
+
+        view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+        expect(logger).to have_received(:warn).with(/async mode needs a session_id/)
+      end
+
+      it "treats a blank session id the same as a missing one" do
+        html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "  ", async: true)
+
+        expect(html).not_to include("data-wavebird-mode-value")
+      end
     end
 
     it "scopes two visitors at the same position to different streams" do
