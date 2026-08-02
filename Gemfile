@@ -25,6 +25,8 @@ group :development, :test do
   gem "selenium-webdriver", "~> 4.27"
   gem "simplecov", "~> 0.22", require: false
   gem "webmock", "~> 3.25"
+  # Public API docs (Phase 9): `yard stats --list-undoc` must stay clean.
+  gem "yard", "~> 0.9", require: false
 
   # Optional runtime requirements of async delivery mode (decision #010) and the
   # Stimulus JS the dummy app loads via importmap (no Node build step). Present

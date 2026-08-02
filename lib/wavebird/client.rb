@@ -49,12 +49,22 @@ module Wavebird
     # (build prompt §3.7).
     CONSENT_SOURCE_ALIASES = { "publisher" => "publisher_custom", "custom_dialog" => "publisher_custom" }.freeze
 
-    # Upstream polling constants (getDecisionViaPolling): long-poll attempts in
-    # polling mode, short-poll attempt cap, backoff growth/cap and jitter.
+    # Upstream polling constants (+getDecisionViaPolling+), all mirrored exactly.
+
+    # Long-poll attempts made before the ladder drops to short polling.
     LONG_POLL_ATTEMPTS = 2
+
+    # Hard cap on short-poll attempts, independent of the time budget.
     MAX_SHORT_POLL_ATTEMPTS = 120
+
+    # Multiplier applied to the short-poll interval after each attempt.
     BACKOFF_FACTOR = 1.5
+
+    # Ceiling the backed-off short-poll interval is clamped to, in milliseconds.
     BACKOFF_CAP_MS = 2_000
+
+    # Random jitter added to each short-poll sleep, in milliseconds, so
+    # concurrent pollers do not synchronize.
     JITTER_MS = 100
 
     # Name of the ActiveSupport::Notifications event published per request.

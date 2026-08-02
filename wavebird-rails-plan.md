@@ -314,15 +314,30 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 
 **Gate:** full matrix CI green.
 
-## Phase 9 — Documentation & examples
+## Phase 9 — Documentation & examples — **done**
 
-- [ ] README: what/why, install, Rails-flavored quickstart mirroring the brief's
+- [x] README: what/why, install, Rails-flavored quickstart mirroring the brief's
   Next.js example, public API reference table, §4 privacy rules stated explicitly,
   credential-class table (sk_test/sk_dry/sk_live/pk), credits + links to
   wavebird.ai/api and the upstream TS SDK (acceptance §6).
-- [ ] YARD on every public method; `yard stats --list-undoc` clean.
-- [ ] `examples/` minimal chat-with-sponsored-slot controller + view.
-- [ ] CHANGELOG entry for 0.1.0.
+- [x] YARD on every public method; `yard stats --list-undoc` clean (100%).
+  Internal helpers carry `@api private` and are excluded via `.yardopts`
+  (`--hide-api private`); `rake yard_coverage` keeps it at 100% and is part of
+  the default task.
+- [x] `examples/chat_with_sponsored_slot/` — initializer, routes, controllers and
+  view, laid out as a host-app tree so they copy-paste directly.
+- [x] CHANGELOG entry for 0.1.0.
+
+**Beyond the checklist**
+- `spec/wavebird/examples_spec.rb` pins the example files to the real API
+  (config options, helper names, `wavebird_slot` keywords, the engine mount), so
+  a rename breaks the build instead of shipping a quickstart that raises in a
+  user's app on their first try.
+- Found and fixed a genuine documentation gap: the engine isolates its namespace,
+  so a host must `helper Wavebird::SlotHelper` before the view helpers resolve.
+  `spec/dummy` did this; neither README nor INSTALL.md said so — the copy-pasted
+  quickstart would have failed at acceptance §4. Now documented in both.
+- `examples/**/*` added to the gemspec's `spec.files`.
 
 ## Phase 10 — Final audits (the two verification tracks)
 

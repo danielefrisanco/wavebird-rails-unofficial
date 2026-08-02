@@ -1,0 +1,11 @@
+--markup markdown
+--no-private
+--hide-api private
+--readme README.md
+lib/**/*.rb
+app/**/*.rb
+-
+CHANGELOG.md
+INSTALL.md
+docs/DECISIONS.md
+docs/parity.md

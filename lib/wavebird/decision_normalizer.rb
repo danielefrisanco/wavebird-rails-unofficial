@@ -20,9 +20,16 @@ module Wavebird
   # +sdk_invalid_decision_response+; the polling ladder treats it as a failed
   # poll, mirroring upstream's fail-silent fallback).
   module DecisionNormalizer
+    # Creative duration used when the decision omits +duration_ms+ (upstream default).
     DEFAULT_CREATIVE_DURATION_MS = 3_000
+
+    # Creative width used when +dimensions+ is null or omits +width+.
     DEFAULT_CREATIVE_WIDTH = 300
+
+    # Creative height used when +dimensions+ is null or omits +height+.
     DEFAULT_CREATIVE_HEIGHT = 250
+
+    # Canonical creative formats a ready fill may declare.
     FORMATS = %w[banner clip native].freeze
 
     module_function

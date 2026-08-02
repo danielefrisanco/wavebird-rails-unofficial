@@ -83,7 +83,17 @@ Pick the section matching your app's JavaScript setup.
 
 ## Using the slot in a view
 
-Once the controller is registered, render a slot and the render-script tag:
+The engine isolates its namespace, so its view helpers are not mixed into your
+app's views automatically. Opt in once:
+
+```ruby
+# app/controllers/application_controller.rb
+class ApplicationController < ActionController::Base
+  helper Wavebird::SlotHelper
+end
+```
+
+Then render a slot and the render-script tag:
 
 ```erb
 <%= wavebird_render_script_tag %>
