@@ -91,9 +91,19 @@ session scoping reverted, the new two-session spec fails on all four assertions 
 including visitor B's page containing visitor A's `at_secret_async` token. That
 is the leak, reproduced, and it is why a single-session suite never saw it.
 
+**Ultrareview (cloud, 27 files / ~724 insertions)** — one finding, classified
+pre-existing: `create_job` did not fall back to `config.default_slot_hint` while
+`create_placement` did, and the browser never sends a `slot_hint`, so a host's
+configured hint reached the auction in blocking mode and vanished in async. Same
+class of gap as the consent one fixed in #014a, one line away in the same method,
+and missed while fixing that one. Fixed by mirroring `create_placement`; spec
+verified against the unfixed code. Nothing flagged on the security work.
+
+Worth noting the review did *not* surface the raise-vs-degrade problem — no
+crash, no wrong output, working as written — which Daniele caught by asking why.
+The more consequential of the two came from the human read.
+
 **Todo**
-- `/code-review` is user-triggered and billed — Daniele runs it; findings come
-  back into this phase.
 - `gem install pkg/*.gem` into a fresh `rails new` app → Phase 11.
 - Sandbox smoke test still blocked on `sk_test_...` credentials.
 

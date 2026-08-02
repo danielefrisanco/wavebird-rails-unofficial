@@ -32,6 +32,32 @@ RSpec.describe Wavebird::Client, "jobs and generation" do
       expect(stub).to have_been_requested
     end
 
+    # The engine endpoint picks create_job vs create_placement purely by delivery
+    # mode, and the browser never sends a slot_hint — so without this fallback a
+    # configured hint reached the auction in blocking mode and vanished in async.
+    it "falls back to the configured slot hint, like create_placement" do
+      config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
+      stub = stub_request(:post, jobs_url)
+             .with(body: hash_including("slot_hint" => { "position" => "below", "max_width" => 728,
+                                                         "max_height" => 90 }))
+             .to_return(status: 200, body: JSON.generate(accepted))
+
+      client.create_job(job_type: "chat")
+
+      expect(stub).to have_been_requested
+    end
+
+    it "prefers an explicit slot hint over the configured default" do
+      config.default_slot_hint = { position: "below" }
+      stub = stub_request(:post, jobs_url)
+             .with(body: hash_including("slot_hint" => { "position" => "sidebar" }))
+             .to_return(status: 200, body: JSON.generate(accepted))
+
+      client.create_job(job_type: "chat", slot_hint: { position: "sidebar" })
+
+      expect(stub).to have_been_requested
+    end
+
     it "merges the default publisher into overrides" do
       config.default_publisher = { app_name: "SpecApp" }
       stub = stub_request(:post, jobs_url)

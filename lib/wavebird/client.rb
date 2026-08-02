@@ -114,7 +114,9 @@ module Wavebird
     # @param locale [String, nil]
     # @param slots_requested [Integer]
     # @param topic [String, nil] semantic topic hint, sent as +prompt.topic+
-    # @param slot_hint [Hash, nil]
+    # @param slot_hint [Hash, nil] defaults to +config.default_slot_hint+, as in
+    #   {#create_placement} — the engine endpoint picks between the two by
+    #   delivery mode, so a configured hint must reach the auction either way
     # @param overrides [Hash, nil] merged over +config.default_overrides+
     # @param publisher [Hash, nil] merged over +config.default_publisher+
     # @param consent [Hash, nil] per-request consent flags. The canonical
@@ -128,7 +130,8 @@ module Wavebird
                    topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
                      slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
-                     slot_hint: slot_hint, overrides: job_overrides(overrides, publisher, consent))
+                     slot_hint: slot_hint || config.default_slot_hint,
+                     overrides: job_overrides(overrides, publisher, consent))
       accepted_job(parsed_body(request(:post, "/v1/jobs", body: body)))
     end
 
