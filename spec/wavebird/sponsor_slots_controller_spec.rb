@@ -168,6 +168,18 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
 
         expect(a_request(:post, placements_url)).not_to have_been_made
       end
+
+      # Async used to strip consent entirely, so the same host code sent a GDPR
+      # flag in blocking mode and silently dropped it here. The canonical jobs
+      # route carries it as overrides.gdpr_applies (upstream createV1JobRequest).
+      it "forwards the consent flag the canonical jobs route can carry" do
+        post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async",
+                                            consent: { gdpr_applies: true })
+
+        expect(a_request(:post, "https://api.wavebird.ai/v1/jobs")
+          .with(query: hash_including({}),
+                body: hash_including("overrides" => { "gdpr_applies" => true }))).to have_been_made
+      end
     end
 
     context "when Turbo Streams is not available" do

@@ -50,7 +50,7 @@ browser as `{ fill: false }` with 200.
 | `createJob(params)` | canonical `POST /v1/jobs` when params fit; legacy wrapper ingress otherwise | `#create_job` → canonical only | port (canonical only) |
 | — | `POST /v1/placements?wait_ms=` (job+first decision in one call; recommended by docs, not in SDK) | `#create_placement` | **add** — docs-recommended primary path; not a deviation, it's the API-first route |
 | `getDecision(slotId)` | WS → long-poll → short-poll ladder | `#decision(slot_id)` long-poll + short-poll, same budgets | adapt per #001 |
-| `reportGeneration(jobId, event, req)` | `POST /v1/jobs/{job_id}/generation/{event}`; events `started\|finished\|failed`; body `generation_id`, `model_id`, `usage_json`, `error` | `#report_generation` | **recommend port** (decision #002, awaiting Daniele): canonical v1 route, trivial, needed for `timing: "during"` server flows |
+| `reportGeneration(jobId, event, req)` | `POST /v1/jobs/{job_id}/generation/{event}`; events `started\|finished\|failed`; body `generation_id`, `model_id`, `usage_json`, `error` | `#report_generation` | **ported** (decision #002 approved) — event validated locally against the canonical enum before the request, since it forms the URL path |
 | `sendBeacon(beacon)` | canonical `POST /v1/beacons` (maps legacy `beacon_type`→canonical `event`, ms epoch→ISO8601); falls back to legacy wrapper path | `#record_beacon` canonical only, canonical field names (`event`, `occurred_at`) | port (canonical only) |
 | — | `POST /v1/consent` | `#record_consent` | add (docs §3.7) |
 | — | `POST /v1/browser/activate` | `#activate_browser` | add (docs §3.4, secondary) |
@@ -99,6 +99,55 @@ browser as `{ fill: false }` with 200.
 - `job_type`: `chat|code|image|voice|agent`
 - position: `above|below|sidebar|between`; formats: `banner|clip|native`
 - consent decision: `personalized|basic|custom`; source: `publisher_custom|server_sync|wavebird_dialog` (+ input aliases `publisher`, `custom_dialog`)
+
+## Phase 10 audit — parity table re-walked against final code (2026-08-02)
+
+Every row above re-checked field-for-field against the shipped gem and the
+upstream source in `upstream/wavebird/src/`. **Confirmed at parity:**
+
+- Config defaults and clamps: `timeout_ms` 2000/250–30000, `decision_timeout_ms`
+  30000/1000–60000, `long_poll_wait_ms` 1500/0–5000, `short_poll_interval_ms`
+  250/100–5000; `clampInt`'s floor-then-clamp semantics ported exactly.
+- `parseRetryAfterMs`: non-negative delta-seconds → HTTP-date → 1 s default, with
+  the same fall-through order (a negative or non-finite value drops to the date
+  branch and then to the default). Ported in seconds rather than ms.
+- Base-URL normalization: HTTPS enforced except for the same `LOCALHOST_HOSTNAMES`
+  set, trailing slashes stripped.
+- Canonical `/v1/jobs` request body: `client_id`, `session_id`, `job_type`,
+  `locale`, `slots_requested` (default 1), `prompt`, `slot_hint`, `overrides` —
+  field-for-field, including `overrides.publisher` built as
+  `{**default_publisher, **publisher}`.
+- Beacon: 204/empty body → `{accepted: true, reason_code: "OK"}`; canonical
+  `event`/`occurred_at` field names; tolerant of unknown response fields.
+- Decision normalization and the polling ladder: see `decision_normalizer.rb`
+  and `Client#await_decision` (2 long polls, ×1.5 backoff capped at 2 s + jitter,
+  `min(120, decision_timeout_ms / short_poll_interval_ms)` attempts).
+- Canonical enums, all five, unchanged.
+
+**Deliberate divergences, now recorded explicitly:**
+
+| Area | Upstream | Gem | Why |
+|---|---|---|---|
+| `prompt.text` | canonical job request accepts `prompt.text` (from `params.prompt` or `context.prompt_text`) | only `topic:` is exposed; there is no parameter that accepts user text | Build prompt §4: "the client's public API should not even have a parameter that invites this by accident." A narrowing, and intentional. |
+| `overrides` sub-keys | ~12 individually typed fields (`allowed_formats`, `bidfloor`, `timing`, `frequency_cap`, `targeting`, `pacing`, `blocked_*`, …) | one free-form `overrides:` Hash merged over `config.default_overrides` | Every upstream key remains expressible; typing them in Ruby would freeze a contract that upstream still evolves. |
+| non-finite numeric config | `clampInt` silently falls back to the default | raises `ConfigurationError` | `Float::INFINITY` for a timeout is a caller bug, not a default. Consistent with the existing "non-numeric raises" rule. |
+| `asset_token → slot_id` memo | client remembers the mapping to backfill beacon `slot_id` | not ported | Beacons are an escape hatch here (the hosted renderer sends its own); `slot_id` is a required keyword instead. Was already flagged low-priority in Phase 0. |
+
+**Gaps found and closed (decisions #013, #014):**
+
+- **Consent defaults.** The integration brief's reference backend hard-codes
+  `semantic_targeting: false, prompt_shared: false, consent_source: "wavebird_consent"`
+  on every request; the gem sends nothing unless the caller does. Checked against
+  the SDK rather than the brief: the SDK injects no defaults either, and
+  `consent_source: "wavebird_consent"` appears only in its deprecated DOM
+  components after a real dialog decision. **Resolved as "match the SDK"** — the
+  gem is already correct, and defaulting that source would misstate provenance
+  for a host using its own CMP. Documented in the README instead.
+- **Async dropped consent entirely.** `create_job` had no `consent:` parameter
+  and the controller stripped it, so a GDPR flag sent in blocking mode vanished
+  in async mode. Now ported from upstream's `createV1JobRequest`: `gdpr_applies`
+  folds into `overrides.gdpr_applies`, and any flag the canonical route cannot
+  carry is named in a warning rather than dropped in silence.
 
 ## Resolved questions (see docs/DECISIONS.md)
 

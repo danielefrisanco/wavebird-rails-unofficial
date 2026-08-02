@@ -263,6 +263,34 @@ These are wavebird's own product rules, baked in as behavior rather than advice:
 The session id the gem generates is a random anonymous `sess_` token, not a user
 identifier.
 
+### Consent flags are yours to send
+
+The gem sends a `consent` object **only when you supply one** — matching the
+TypeScript SDK, which injects no defaults either (decision #013). If you send
+nothing, wavebird applies its own server-side defaults.
+
+If your app has a CMP, or you simply want to assert the protective values, pass
+them explicitly:
+
+```ruby
+Wavebird.client.create_placement(
+  job_type: "chat",
+  session_id: session_id,
+  consent: { semantic_targeting: false, prompt_shared: false,
+             gdpr_applies: true, consent_source: "publisher_custom" }
+)
+```
+
+Use `consent_source: "publisher_custom"` when the consent came from your own UI.
+`"wavebird_consent"` means the user answered wavebird's own consent dialog — the
+gem never renders one, so claiming it would misstate where the consent came from.
+
+Two notes on delivery mode: the browser endpoint forwards a `consent` object your
+JavaScript posts to it, and the canonical `POST /v1/jobs` route used by **async
+mode** can only carry `gdpr_applies` (upstream folds it into `overrides`). Other
+flags are logged and skipped there; send them through the blocking path, whose
+`/v1/placements` body takes the full object.
+
 ## Development
 
 ```sh

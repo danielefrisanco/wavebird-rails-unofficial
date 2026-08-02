@@ -117,12 +117,18 @@ module Wavebird
     # @param slot_hint [Hash, nil]
     # @param overrides [Hash, nil] merged over +config.default_overrides+
     # @param publisher [Hash, nil] merged over +config.default_publisher+
+    # @param consent [Hash, nil] per-request consent flags. The canonical
+    #   +/v1/jobs+ route carries consent as +overrides.gdpr_applies+ only
+    #   (upstream +createV1JobRequest+ falls back to the legacy wrapper ingress
+    #   for the richer flags, which this canonical-only client does not mirror).
+    #   Any other flag is dropped with a warning — send it to
+    #   {#create_placement}, whose request body accepts the full object.
     # @return [Types::AcceptedJob]
     def create_job(job_type:, session_id: nil, locale: nil, slots_requested: 1,
-                   topic: nil, slot_hint: nil, overrides: nil, publisher: nil)
+                   topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
                      slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
-                     slot_hint: slot_hint, overrides: merged_overrides(overrides, publisher))
+                     slot_hint: slot_hint, overrides: job_overrides(overrides, publisher, consent))
       accepted_job(parsed_body(request(:post, "/v1/jobs", body: body)))
     end
 
@@ -440,6 +446,35 @@ module Wavebird
     end
 
     # -- request building ----------------------------------------------------
+
+    # Overrides for the canonical +POST /v1/jobs+ body. Port of upstream
+    # +createV1JobRequest+: the canonical route expresses consent as
+    # +overrides.gdpr_applies+ and nothing else, so that one flag is folded in
+    # and any other is reported rather than silently dropped (upstream reaches
+    # the legacy wrapper ingress for those; this client is canonical-only).
+    def job_overrides(overrides, publisher, consent)
+      merged = merged_overrides(overrides, publisher)
+      return merged if consent.nil?
+
+      warn_unmapped_consent(consent)
+      gdpr_applies = Types.field(consent, :gdpr_applies)
+      return merged if gdpr_applies.nil?
+
+      (merged || {}).merge(gdpr_applies: gdpr_applies)
+    end
+
+    # Names the consent flags the canonical jobs route cannot carry, so a caller
+    # who set them learns they need {#create_placement} instead of discovering
+    # it from an auction that ignored their flags.
+    def warn_unmapped_consent(consent)
+      dropped = consent.keys.map(&:to_s) - ["gdpr_applies"]
+      return if dropped.empty?
+
+      config.logger&.warn(
+        "[wavebird] POST /v1/jobs carries consent as gdpr_applies only; ignoring #{dropped.sort.join(', ')}. " \
+        "Use create_placement (POST /v1/placements) to send the full consent object."
+      )
+    end
 
     def merged_overrides(overrides, publisher)
       merged_publisher = merge_hashes(config.default_publisher, publisher)

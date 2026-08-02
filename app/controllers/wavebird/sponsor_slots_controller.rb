@@ -98,9 +98,12 @@ module Wavebird
       }.compact
     end
 
-    # +create_job+ takes the same context minus the placement-only +consent+ arg.
+    # +create_job+ takes the same context, consent included: the canonical jobs
+    # route carries it as +overrides.gdpr_applies+ (see {Client#create_job}), so
+    # forwarding it keeps async delivery from quietly losing a flag the blocking
+    # path would have sent.
     def job_args
-      placement_args.except(:consent)
+      placement_args
     end
 
     def slot_params

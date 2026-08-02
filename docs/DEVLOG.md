@@ -2,6 +2,59 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-08-02 (later) — Phase 10: parity + quality audits
+
+**Done**
+- **Parity table re-walked field-for-field** against the shipped gem and
+  `upstream/wavebird/src/`. Confirmed at parity: config defaults/clamps,
+  `parseRetryAfterMs`'s fall-through order, base-URL normalization, the canonical
+  `/v1/jobs` body, beacon 204 handling, the polling ladder, all five enums. Four
+  deliberate divergences now recorded explicitly in `docs/parity.md` (no
+  `prompt.text` parameter by design, free-form `overrides`, raising on non-finite
+  numeric config, no `asset_token → slot_id` memo).
+- **Changelog re-checked live** (`wavebird.ai/api/changelog`): still "2026 Q2",
+  byte-identical to the Phase 0 snapshot. No contract drift.
+- **Consent posture settled (#013).** The integration brief's reference backend
+  hard-codes `semantic_targeting: false, prompt_shared: false, consent_source:
+  "wavebird_consent"`; the gem sends nothing unless the caller does. Checked the
+  SDK rather than the brief — it injects no defaults either, and that
+  `consent_source` value appears only in deprecated DOM components after a real
+  dialog decision. Daniele's call: match the SDK. Documented in the README, with
+  the note that a host's own CMP is `publisher_custom`, not `wavebird_consent`.
+- **Async no longer drops consent (#014a).** `#create_job` gained `consent:` and
+  folds `gdpr_applies` into `overrides.gdpr_applies` per upstream
+  `createV1JobRequest`; other flags are named in a warning instead of vanishing.
+  The controller stopped stripping consent from `job_args`.
+- **CI matrix rebuilt (#014b)** as `gemfiles/rails_{7.1,7.2,8.0,8.1}.gemfile`,
+  each setting `RAILS_VERSION` and `eval_gemfile`-ing the root Gemfile. Closes
+  the Phase 1 checkbox that had been open since the start.
+- Gem hygiene verified: 31 files packaged, no test files, MFA required, semver,
+  MIT, minimal runtime deps.
+
+**Problems found**
+- **The CI matrix was silently broken, and CI had never run** (no git remote, `gh`
+  unauthenticated). Nothing capped Rails, so all three Ruby legs resolved railties
+  8.1.3. Verified locally: Ruby 3.2.2 green, **3.3.0 hard `SyntaxError`**
+  (`actionview-8.1.3/capture_helper.rb:50: anonymous rest parameter is also used
+  within block`), 3.4.10 green — the check landed in Ruby 3.3 and was relaxed
+  again in 3.4. This refines #007, which claimed 8.1.3 cannot parse on 3.3: true
+  for 3.3, but 3.2 parses it fine. After the fix, 3.3/7.1, 3.2/8.0 and 3.4/8.1 all
+  run 350 examples green.
+- **I overstated the consent finding** before checking the SDK, calling it a
+  build-prompt §4 requirement. §4's four rules are no prompts/PII forwarded, key
+  not browser-reachable, no-fill leaves the host flow intact, `asset_token`
+  redacted — consent defaults are not among them. Corrected in #013.
+- Running the matrix with `BUNDLE_PATH` pointed at a scratchpad rewrote the root
+  `Gemfile.lock` to gems installed only there; deleting the scratchpad broke the
+  local bundle until `bundle install` restored it. The per-Rails gemfiles avoid
+  this — each keeps its own lockfile and shares the default gem path.
+
+**Todo**
+- `/code-review` and `/security-review` are user-triggered and billed — Daniele
+  runs them; findings come back into this phase.
+- `gem install pkg/*.gem` into a fresh `rails new` app → Phase 11.
+- Sandbox smoke test still blocked on `sk_test_...` credentials.
+
 ## 2026-08-02 — Phase 9: documentation & examples
 
 **Done**

@@ -41,10 +41,11 @@ audit phase at the end.
   `rubygems_mfa_required = "true"` in metadata.
 - [x] Dev tooling: RSpec, WebMock, SimpleCov (min coverage enforced), RuboCop
   (standard style, `.rubocop.yml` committed), `rake` default task = spec + rubocop.
-- [ ] GitHub Actions CI: matrix over supported Ruby × Rails (7.1, 7.2, 8.0) via
-  `appraisal` or gemfiles; runs rspec + rubocop. **Dev is now on Ruby 3.4.10 +
-  Rails 8.1 (decision #007)**; the CI Ruby floor will be pinned when the matrix
-  lands (Phase 8) — the gem still declares `>= 3.2` for consumers on older Rails.
+- [x] GitHub Actions CI: matrix over supported Ruby × Rails via `gemfiles/`;
+  runs rspec + rubocop. **Landed in Phase 10 (decision #014)** — 10 legs
+  (Ruby 3.2/3.3/3.4 × Rails 7.1/7.2/8.0/8.1, minus 8.1 on 3.2/3.3). The earlier
+  Ruby-only matrix was silently broken: nothing capped Rails, so every leg
+  resolved 8.1.3, which does not parse on Ruby 3.3.
 
 **Gate:** `bundle exec rake` green on empty skeleton; CI runs.
 
@@ -341,26 +342,38 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 
 ## Phase 10 — Final audits (the two verification tracks)
 
-**A. Parity audit vs the TypeScript SDK**
-- [ ] Walk the Phase 0 parity table against final code: every ported method's
+**A. Parity audit vs the TypeScript SDK — done**
+- [x] Walk the Phase 0 parity table against final code: every ported method's
   request fields, defaults, and response handling checked against
-  `public_contracts.ts` and the API reference pages, field-for-field.
-- [ ] Resolve the `reportGeneration()` question (port in v1, or documented as
-  out-of-scope with rationale).
-- [ ] Diff the README quickstart flow against the integration brief's recommended
-  architecture — same endpoints, same consent defaults, same no-fill posture.
-- [ ] Re-check `https://wavebird.ai/api/changelog` for contract drift since Phase 0.
+  `public_contracts.ts` and the API reference pages, field-for-field. Results and
+  the four deliberate divergences are recorded in `docs/parity.md`.
+- [x] Resolve the `reportGeneration()` question — decision #002 approved it for
+  v1 and it shipped as `#report_generation`; the parity table's row still said
+  "awaiting Daniele" and has been corrected.
+- [x] Diff the README quickstart flow against the integration brief's recommended
+  architecture. Same endpoints and same no-fill posture. **Consent defaults
+  differ** — the brief's reference backend hard-codes protective flags, the SDK
+  injects none, and the gem follows the SDK (decision #013).
+- [x] Re-check `https://wavebird.ai/api/changelog` for contract drift since
+  Phase 0 — refetched 2026-08-02, still "2026 Q2", identical to the snapshot.
+  **No drift.**
 
 **B. Industry-standard quality audit**
-- [ ] `rubocop` clean; `bundle exec rake` green; coverage threshold met.
-- [ ] Run `/code-review` on the full diff; fix findings.
+- [x] `rubocop` clean; `bundle exec rake` green; coverage threshold met.
+- [x] CI matrix rebuilt as a real Ruby × Rails grid (decision #014); three legs
+  verified locally — 3.3/7.1, 3.2/8.0, 3.4/8.1, all 350 examples green.
+- [x] Gem hygiene: semver 0.1.0, `rubygems_mfa_required`, MIT, homepage +
+  `source_code_uri` set, minimal runtime deps (faraday + railties), 31 files
+  packaged with **no** test/spec files, `rake build` succeeds.
+- [ ] `gem install pkg/*.gem` smoke test in a fresh `rails new` app — deferred to
+  Phase 11 (needs a full `rails new` + network install).
+- [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
+  this** — it is user-invoked and billed.
 - [ ] Run `/security-review`: key handling, log redaction, no PII pathways,
   no secret in any JSON/HTML output (acceptance §5 has an explicit test).
-- [ ] Gem hygiene checklist: semver, `rubygems_mfa_required`, no test files in the
-  packaged gem (`spec.files` check), `bundle exec rake build` + local
-  `gem install pkg/*.gem` smoke test in a fresh `rails new` app.
+  **Daniele must trigger this.**
 - [ ] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
-  (acceptance §4) — requires user-supplied sandbox credentials.
+  (acceptance §4) — still blocked on user-supplied sandbox credentials.
 
 ## Phase 11 — Release prep (not executed without explicit go-ahead)
 
