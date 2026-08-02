@@ -25,6 +25,8 @@ module Wavebird
   module SlotPayload
     module_function
 
+    # Path of the hosted frame endpoint, which takes the asset token as its last
+    # segment (+/v1/render/{asset_token}+).
     RENDER_PATH = "/v1/render"
 
     # DOM id of a slot's <section>, shared by the view helper (which renders it)

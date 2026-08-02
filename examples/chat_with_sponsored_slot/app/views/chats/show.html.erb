@@ -1,0 +1,60 @@
+<h1>Chat</h1>
+
+<div id="messages">
+  <% @messages.each do |message| %>
+    <p><%= message %></p>
+  <% end %>
+</div>
+
+<form id="composer">
+  <input type="text" name="message" placeholder="Ask something…">
+  <button type="submit">Send</button>
+</form>
+
+<%#
+  Loads wavebird's hosted renderer (https://api.wavebird.ai/v1/render.js) once
+  per page, no matter how many slots you declare. Optional — the Stimulus
+  controller loads it as a fallback — but emitting it here lets the browser
+  start fetching earlier.
+%>
+<%= wavebird_render_script_tag %>
+
+<%#
+  The slot itself: a plain <section>, rendered hidden. The hosted renderer owns
+  it from here — it reveals the section and mounts its frame inside on a fill,
+  and leaves it hidden on a no-fill. Pass `async: true` to resolve the placement
+  in a background job and reveal the slot over a Turbo Stream instead.
+%>
+<%= wavebird_slot endpoint: wavebird.sponsor_slot_path,
+                  session_id: wavebird_session_id,
+                  position: "below" %>
+
+<script type="module">
+  // Your real AI call. Anything returning a promise works — a fetch to your own
+  // streaming endpoint, a Turbo form submission you await, and so on.
+  async function sendChatMessage(message) {
+    const response = await fetch("/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    return response.json();
+  }
+
+  const composer = document.querySelector("#composer");
+  const slot = document.querySelector("#wavebird-slot-below");
+
+  composer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const message = new FormData(composer).get("message");
+
+    // Hand the turn to wavebird. The gem's Stimulus controller wraps `work` in
+    // window.wavebird.withTurn(...), so the placement is auctioned while your
+    // answer generates, and injects the slot's stable session_id into the
+    // request. If wavebird never loaded, it simply runs `work` unwrapped —
+    // your chat turn is never blocked by the ad path.
+    slot.dispatchEvent(new CustomEvent("wavebird:turn", {
+      detail: { work: () => sendChatMessage(message) },
+    }));
+  });
+</script>

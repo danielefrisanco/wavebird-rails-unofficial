@@ -2,6 +2,49 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-08-02 — Phase 9: documentation & examples
+
+**Done**
+- README rewritten as the gem's front door: what/why (the three design
+  commitments), install, a three-file quickstart mirroring the brief's Next.js
+  example, full public API tables (module, facade, client, Rails integration,
+  configuration, errors), the credential-class table, the §4 privacy rules
+  restated as enforced behavior, and credits.
+- YARD at **100%** (`yard stats --list-undoc` clean). `.yardopts` hides
+  `@api private` internals; the remaining gaps were real — polling constants,
+  creative defaults, `VERSION`, `RENDER_PATH`, `DEFAULT_API_BASE_URL` — and are
+  now documented individually. New `rake yard_coverage` task guards it and joins
+  the default task.
+- `examples/chat_with_sponsored_slot/` — initializer, routes, both controllers
+  and the view, laid out as a host-app tree with a README explaining the flow and
+  why it is safe to try without a key (an unconfigured key is just a no-fill).
+- `CHANGELOG.md` 0.1.0 entry covering the whole surface built in Phases 0–8.
+- `spec/wavebird/examples_spec.rb` (10 examples): the example files parse, set
+  only real `Configuration` options, call only real `SlotHelper` helpers with
+  keywords `wavebird_slot` accepts, include the concern *and* the helper opt-in,
+  and mount the engine the view's route helper assumes.
+
+**Problems found**
+- **A real documentation gap, caught by writing the example.** The engine is
+  namespace-isolated, so its view helpers are not mixed into host views
+  automatically — a host must `helper Wavebird::SlotHelper`. `spec/dummy` did
+  exactly that (with a comment claiming INSTALL.md documented it), but no
+  user-facing doc mentioned it. A copy-pasted quickstart would have died on
+  `undefined method wavebird_slot` — i.e. acceptance §4 would have failed on a
+  real user's first attempt. Now in README, INSTALL.md and the example, and
+  asserted by the examples spec.
+- `Style/HashSlice` fired on `Method#parameters.select` in the new spec; its
+  autocorrect would have been wrong (that's an Array, not a Hash). Rewritten as
+  `filter_map`.
+
+**Todo**
+- Phase 10: parity audit vs the TS SDK, `/code-review` + `/security-review`, gem
+  hygiene (`spec.files`, `rake build`, install into a fresh `rails new`), and the
+  sandbox smoke test once credentials exist.
+- Still open from Phase 1: the CI matrix lists Ruby 3.2/3.3/3.4 but Rails 8.1
+  needs 3.4 (decision #007) — reconcile in Phase 10.
+- Deferred: system-suite speedup (browser reuse; ~4 min for 17 examples today).
+
 ## 2026-08-01 — Phase 8: dummy host app + Capybara system tests
 
 **Done**

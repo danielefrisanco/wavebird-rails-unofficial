@@ -25,4 +25,14 @@ end
 
 RuboCop::RakeTask.new
 
-task default: %i[spec spec:system rubocop]
+desc "Fail unless every public API object carries YARD documentation"
+task :yard_coverage do
+  require "open3"
+  stats, status = Open3.capture2e("bundle", "exec", "yard", "stats", "--list-undoc")
+  abort(stats) unless status.success?
+
+  puts stats
+  abort("Public API documentation is incomplete (see the list above).") unless stats.include?("100.00% documented")
+end
+
+task default: %i[spec spec:system rubocop yard_coverage]

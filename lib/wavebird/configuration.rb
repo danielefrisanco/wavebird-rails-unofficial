@@ -13,6 +13,7 @@ module Wavebird
   # (where the compiler rejects non-numbers), non-numeric values raise
   # {ConfigurationError} — the Ruby analog of a type error.
   class Configuration
+    # Canonical wavebird REST v1 origin, used unless {#api_base_url=} overrides it.
     DEFAULT_API_BASE_URL = "https://api.wavebird.ai"
 
     # Hostnames allowed to use plain HTTP (mirrors upstream LOCALHOST_HOSTNAMES).
