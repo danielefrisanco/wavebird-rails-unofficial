@@ -133,8 +133,8 @@ Phase 6 with its browser half (Daniele's call). Dev toolchain moved to Ruby
   Frame: the hosted renderer owns the element via `replaceChildren`/`hidden`, so
   Stimulus decorates it; async mode reveals it via Turbo **Streams**), matching
   the integration brief's plain-HTML example semantically.
-- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
-  Phase 6 (needs the Stimulus/Turbo-Stream browser half to be testable):
+- [x] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
+  Phase 6 and shipped there (6b, decisions #001/#009/#010) (needs the Stimulus/Turbo-Stream browser half to be testable):
   controller calls `#create_job` (non-blocking, zero added chat latency) →
   `Wavebird::DecisionPollJob` (ActiveJob, SolidQueue-compatible) polls
   `GET /v1/decisions/{slot_id}` with `wait_ms` long-poll → on decision,
@@ -160,9 +160,9 @@ end-to-end (Phase 5), so 6a lands the browser glue as a clean, reviewable unit
 and 6b tackles the heavier ActiveJob/Turbo-Stream path on its own commit
 boundary. Neither half gets real (Capybara) tests until Phase 8.
 
-### Phase 6a — Stimulus glue + install docs (this phase)
+### Phase 6a — Stimulus glue + install docs — **done**
 
-- [ ] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
+- [x] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
   once (idempotent), degrades silently if it fails to load. render.js itself owns
   the turn: it POSTs to the slot's `data-wavebird-endpoint`, reveals the
   `<section>` on fill (mounts the iframe via `replaceChildren`/`hidden`), keeps it
@@ -178,13 +178,13 @@ boundary. Neither half gets real (Capybara) tests until Phase 8.
     (render.js's default body is only a random uuid). Falls back to running
     `detail.work()` unwrapped if `window.wavebird` is absent, so the chat turn is
     never blocked.
-- [ ] Verify lifecycle semantics against the **actual hosted render.js** (fetched
+- [x] Verify lifecycle semantics against the **actual hosted render.js** (fetched
   live 2026-07-18; exposes `withTurn`, `startTurn`, `clearPlacement`) — behavior
   parity, not code translation. Keep the snapshot in `docs/upstream/` for diffing.
-- [ ] `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
+- [x] `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
   registering the controller under the `wavebird` identifier; ship the JS in the
   gemspec `files` glob (`app/**/*`).
-- [ ] Install docs (`INSTALL.md`) for importmap AND jsbundling setups.
+- [x] Install docs (`INSTALL.md`) for importmap AND jsbundling setups.
 
 **Tests:** covered by Phase 8 system tests; unit-test any pure JS helpers if extracted.
 
@@ -372,8 +372,19 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 - [ ] Run `/security-review`: key handling, log redaction, no PII pathways,
   no secret in any JSON/HTML output (acceptance §5 has an explicit test).
   **Daniele must trigger this.**
-- [ ] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
-  (acceptance §4) — still blocked on user-supplied sandbox credentials.
+- [x] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
+  (acceptance §4). Run 2026-08-04 as a real host app on localhost against the live
+  sandbox — the first time the gem met the **real** hosted `render.js`. It found
+  the worst bug of the build: the browser payload was a flat projection the
+  renderer could not resolve, so no ad had ever rendered outside the test
+  stand-in, silently, in either delivery mode (decision #017).
+- [x] Close the gap that hid it: `render_js_contract_spec.rb` now pins the payload
+  **shape**, not just the entry-point names — it asserts the snapshot source lines
+  that decide whether a response paints anything, pins `frame_url` to the exact
+  `placement.render` path, and (where node is available) runs the snapshot's own
+  `placementFrom`/`renderFrom` against the real `SlotPayload` output, including a
+  case asserting the old flat shape resolves to nothing. Verified by reverting the
+  fix: 3 examples fail.
 
 ## Phase 10.5 — Install generator & onboarding (scope decision open)
 

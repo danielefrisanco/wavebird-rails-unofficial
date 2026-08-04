@@ -36,9 +36,11 @@ module Wavebird
     # The only render strategy the hosted renderer implements.
     HOSTED_FRAME = "hosted_frame"
 
-    # Creative box the render script itself defaults to when dimensions are
-    # absent (+num(p.width)||300+, +num(p.height)||250+).
+    # Creative width the render script itself falls back to when the decision
+    # carries no dimensions (+num(p.width)||300+ in +renderFrom+).
     DEFAULT_WIDTH = 300
+
+    # Creative height the render script falls back to (+num(p.height)||250+).
     DEFAULT_HEIGHT = 250
 
     # DOM id of a slot's <section>, shared by the view helper (which renders it)
