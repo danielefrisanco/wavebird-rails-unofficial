@@ -20,12 +20,18 @@ RSpec.describe Wavebird::SlotPayload do
       )
     end
 
-    it "projects the browser-safe render fields" do
+    # Shaped as { placement: { render: … } } because that is what the hosted
+    # renderer reads: startTurn resolves placementFrom({decision: response}),
+    # which looks for response.placement, then renderFrom takes p.render.
+    it "projects the browser-safe render fields under placement.render" do
       expect(described_class.call(response)).to eq(
         fill: true,
-        frame_url: "https://api.wavebird.ai/v1/render/at_secret",
-        script_url: "https://api.wavebird.ai/v1/render.js",
-        width: 728, height: 90, label_text: "Sponsored", sponsor_name: "Acme"
+        placement: { render: {
+          strategy: "hosted_frame",
+          frame_url: "https://api.wavebird.ai/v1/render/at_secret",
+          script_url: "https://api.wavebird.ai/v1/render.js",
+          width: 728, height: 90, label_text: "Sponsored", sponsor_name: "Acme"
+        } }
       )
     end
 
@@ -54,8 +60,10 @@ RSpec.describe Wavebird::SlotPayload do
 
       payload = described_class.call(decision)
 
-      expect(payload[:frame_url]).to eq("https://api.wavebird.ai/v1/render/at%20secret%2Ftoken")
-      expect(payload).to include(fill: true, width: 300, height: 250, sponsor_name: "Acme")
+      render = payload[:placement][:render]
+      expect(render[:frame_url]).to eq("https://api.wavebird.ai/v1/render/at%20secret%2Ftoken")
+      expect(payload).to include(fill: true)
+      expect(render).to include(width: 300, height: 250, sponsor_name: "Acme", strategy: "hosted_frame")
     end
 
     it "never leaks the bare asset_token to the browser payload" do
@@ -68,7 +76,8 @@ RSpec.describe Wavebird::SlotPayload do
     it "respects a custom api_base_url" do
       Wavebird.configure { |c| c.api_base_url = "https://sandbox.wavebird.ai" }
 
-      expect(described_class.call(decision)[:frame_url]).to start_with("https://sandbox.wavebird.ai/v1/render/")
+      expect(described_class.call(decision).dig(:placement, :render, :frame_url))
+        .to start_with("https://sandbox.wavebird.ai/v1/render/")
     end
   end
 
@@ -80,7 +89,11 @@ RSpec.describe Wavebird::SlotPayload do
 
       payload = described_class.call(decision)
 
-      expect(payload).to eq(fill: true, frame_url: "https://api.wavebird.ai/v1/render/at_x")
+      # Falls back to the render script's own default box (300x250) when the
+      # decision carries no creative, exactly as its renderFrom would have.
+      expect(payload[:placement][:render]).to include(
+        frame_url: "https://api.wavebird.ai/v1/render/at_x", width: 300, height: 250
+      )
     end
 
     it "omits frame_url when a fill decision carries no asset_token" do

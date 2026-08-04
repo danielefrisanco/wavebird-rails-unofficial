@@ -375,6 +375,37 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 - [ ] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
   (acceptance §4) — still blocked on user-supplied sandbox credentials.
 
+## Phase 10.5 — Install generator & onboarding (scope decision open)
+
+**Why this exists.** Running the gem as a real host app (2026-08-04) showed the
+install is long: mount the engine, write an initializer, `helper
+Wavebird::SlotHelper`, `include Wavebird::SessionId`, two importmap pins **plus**
+adding the gem's `app/javascript` to the asset load path, register the Stimulus
+controller, then two view helpers and a turn dispatch. Eight steps, and steps
+5–6 depend on the host's JS toolchain — the part the gem cannot test for them.
+The vendor's own path is three steps (`<script>`, a div, `withTurn`). If the
+Rails port is harder to adopt than the thing it wraps, that is a product problem,
+not a docs problem. Raised by Daniele.
+
+- [ ] `rails g wavebird:install` — mounts the engine, writes
+  `config/initializers/wavebird.rb`, adds the importmap pins and asset path, and
+  wires `helper`/`include` into `ApplicationController`. Idempotent; prints what
+  it changed. This is the standard Rails answer (Devise, Turbo, Stimulus).
+- [ ] Lead the docs with the **no-Stimulus path**. Path C
+  (`window.wavebird.withTurn("#wavebird-slot-below", work)`) needs neither
+  importmap pins nor controller registration — steps 5 and 6 vanish. It already
+  works (decision #008) but the docs present the Stimulus path first, so it reads
+  as mandatory when it is not. Cheapest available win; do this regardless.
+- [ ] Consider single-file, copy-pasteable examples over the current directory of
+  fragments — upstream ships `browser-chat.html`, `node-server.ts`,
+  `express-middleware.ts`, each standalone. Ours only makes sense assembled.
+- [ ] Optional: promote the scratchpad chat demo into a runnable
+  `rake wavebird:demo`, so "see it working" is one command.
+
+**Open:** does this land in 0.1.0 (before Phase 11) or straight after? Shipping a
+gem whose install is documented-but-fiddly is defensible for a 0.1.0; shipping
+one that is *hard* is not.
+
 ## Phase 11 — Release prep (not executed without explicit go-ahead)
 
 - [ ] Tag v0.1.0, finalize CHANGELOG, `gem build` artifact ready.

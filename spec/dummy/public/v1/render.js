@@ -42,6 +42,47 @@
     };
   }
 
+  // Ported verbatim in behaviour from the snapshot's placementFrom/renderFrom:
+  // an endpoint response is unwrapped to a placement, and a placement resolves
+  // to a render *only* via `p.render.frame_url` or by rebuilding the URL from
+  // `p.asset_token`. Anything else resolves to null and paints nothing.
+  //
+  // This is the part that must not be written to suit the gem's payload — that
+  // is precisely how a shape mismatch with the real renderer slipped past a
+  // green suite once already.
+  // The real script derives this from its own <script src>; the stand-in is
+  // served from the same origin as the app under test, so the document origin is
+  // equivalent here.
+  function scriptOrigin() {
+    return global.location.origin;
+  }
+
+  function placementFrom(input) {
+    if (!input) return null;
+    if (input.placement) return input.placement;
+    if (input.decision && input.decision.placement) return input.decision.placement;
+    return input;
+  }
+
+  function renderFrom(p) {
+    var r = p && p.render;
+    if (r && r.frame_url) return r;
+    var token = p && p.asset_token;
+    if (!token) return null;
+    var w = p.width || 300;
+    var h = p.height || 250;
+    return {
+      strategy: "hosted_frame",
+      frame_url: scriptOrigin() + "/v1/render/" + encodeURIComponent(token),
+      script_url: scriptOrigin() + "/v1/render.js",
+      width: w,
+      height: h,
+      aspect_ratio: w + "/" + h,
+      label_text: p.ad_label_text || "Sponsored",
+      sponsor_name: p.sponsor_name || null,
+    };
+  }
+
   var api = global.wavebird || {};
 
   // Test affordances: let specs observe what the renderer was asked to do.
@@ -58,8 +99,9 @@
 
   api.renderPlacement = function (options) {
     var target = byTarget(options && options.target);
-    var placement = (options && options.placement) || null;
-    var render = placement && placement.render;
+    // Resolved from the options object itself, like the real renderer: it accepts
+    // `{placement: …}` or `{decision: …}` and unwraps either the same way.
+    var render = renderFrom(placementFrom(options));
     if (!target || !render || !render.frame_url) {
       api.clearPlacement({ target: target });
       return Promise.resolve(null);
@@ -111,12 +153,15 @@
         // Async mode answers { pending: true } and reveals later over a Turbo
         // Stream; nothing to render inline.
         if (!decision || decision.pending) return decision;
-        if (!decision.fill) {
+        // The real startTurn resolves the endpoint's answer by wrapping it as
+        // `{decision: response}` — so the response must carry `placement`.
+        var p = placementFrom({ decision: decision });
+        if (!p || !p.render) {
           api.clearPlacement({ target: target });
           return decision;
         }
         return api
-          .renderPlacement({ target: target, placement: { render: decision } })
+          .renderPlacement({ target: target, decision: decision })
           .then(function () { return decision; });
       })
       .catch(function () {

@@ -85,7 +85,12 @@ export default class extends Controller {
     if (!wavebird) return; // render.js not loaded yet; slot simply stays hidden
 
     if (payload && payload.fill) {
-      wavebird.renderPlacement({ target: this.element, placement: { render: payload } });
+      // Handed over as `decision`, exactly as the renderer's own synchronous turn
+      // does: it resolves `options.decision.placement` and then `.render`. The
+      // payload is already that shape — `{ fill, placement: { render: … } }` —
+      // so passing it as `placement:` would bury `render` a level too deep and
+      // silently paint nothing.
+      wavebird.renderPlacement({ target: this.element, decision: payload });
     } else {
       wavebird.clearPlacement({ target: this.element });
     }

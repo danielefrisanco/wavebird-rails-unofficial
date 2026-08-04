@@ -72,9 +72,13 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
       expect(last_response.status).to eq(200)
     end
 
-    it "returns the browser-safe render fields" do
-      expect(json).to include(
-        "fill" => true,
+    # The hosted renderer resolves the response via placementFrom({decision:
+    # response}) -> response.placement -> .render, so the fields must be nested
+    # exactly this way or it paints nothing (decision #017).
+    it "returns the browser-safe render fields under placement.render" do
+      expect(json).to include("fill" => true)
+      expect(json.dig("placement", "render")).to include(
+        "strategy" => "hosted_frame",
         "frame_url" => "https://api.wavebird.ai/v1/render/at_secret_proof",
         "script_url" => "https://api.wavebird.ai/v1/render.js",
         "width" => 728, "height" => 90, "label_text" => "Sponsored", "sponsor_name" => "Acme"

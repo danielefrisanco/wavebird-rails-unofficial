@@ -55,7 +55,9 @@ RSpec.describe Wavebird::DecisionPollJob do
         payload = opts[:locals][:payload]
       end
       expect(payload).not_to have_key(:asset_token)
-      expect(payload[:frame_url]).to eq("https://api.wavebird.ai/v1/render/at_secret_proof")
+      expect(payload.dig(:placement, :render, :frame_url))
+        .to eq("https://api.wavebird.ai/v1/render/at_secret_proof")
+      expect(payload.to_json).not_to include('"asset_token"')
     end
   end
 

@@ -24,15 +24,39 @@ WebMock.disable_net_connect!(allow_localhost: true)
 # Chrome. Without this, Selenium picks the first chromedriver on PATH, which on a
 # developer machine is often a stale version that cannot drive current Chrome.
 # Falls through to Selenium Manager (which downloads a match) when none is found.
-def wavebird_chromedriver_path
-  candidates = [ENV.fetch("CHROMEDRIVER_PATH", nil), "/usr/bin/chromedriver", "/usr/local/bin/chromedriver"]
-  candidates.compact.find { |path| File.executable?(path) && chromedriver_matches_chrome?(path) }
+#
+# The match is deliberately *not* strict equality. Chrome auto-updates far more
+# often than a system chromedriver package, so insisting on an exact major
+# rejected a driver one version behind and fell back to PATH — which on this
+# machine meant a driver 38 majors stale, i.e. a worse choice made confidently.
+# A small skew is tolerated, and the closest candidate wins.
+CHROMEDRIVER_MAX_SKEW = 2
+
+def wavebird_chromedriver_candidates
+  [ENV.fetch("CHROMEDRIVER_PATH", nil), "/usr/bin/chromedriver", "/usr/local/bin/chromedriver"]
+    .compact.select { |path| File.executable?(path) }
 end
 
-def chromedriver_matches_chrome?(driver_path)
-  chrome = `google-chrome --version 2>/dev/null`[/\d+/]
-  driver = `#{driver_path} --version 2>/dev/null`[/\d+/]
-  chrome.nil? || driver.nil? || chrome == driver
+def wavebird_chromedriver_path
+  candidates = wavebird_chromedriver_candidates
+  chrome = major_version(`google-chrome --version 2>/dev/null`)
+  return candidates.first if chrome.nil?
+
+  candidates.filter_map { |path| wavebird_driver_skew(path, chrome) }
+            .min_by(&:last)&.first
+end
+
+# [path, distance-from-installed-Chrome], or nil when unusable.
+def wavebird_driver_skew(path, chrome)
+  major = major_version(`#{path} --version 2>/dev/null`)
+  return nil if major.nil?
+
+  skew = (major - chrome).abs
+  [path, skew] if skew <= CHROMEDRIVER_MAX_SKEW
+end
+
+def major_version(version_output)
+  version_output[/\d+/]&.to_i
 end
 
 Capybara.register_driver :wavebird_headless_chrome do |app|

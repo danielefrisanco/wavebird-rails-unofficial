@@ -29,6 +29,18 @@ module Wavebird
     # segment (+/v1/render/{asset_token}+).
     RENDER_PATH = "/v1/render"
 
+    # Path of the hosted renderer script, named in the payload so the renderer
+    # has the same +script_url+ the blocking path's API response carries.
+    RENDER_JS_PATH = "/v1/render.js"
+
+    # The only render strategy the hosted renderer implements.
+    HOSTED_FRAME = "hosted_frame"
+
+    # Creative box the render script itself defaults to when dimensions are
+    # absent (+num(p.width)||300+, +num(p.height)||250+).
+    DEFAULT_WIDTH = 300
+    DEFAULT_HEIGHT = 250
+
     # DOM id of a slot's <section>, shared by the view helper (which renders it)
     # and {DecisionPollJob} (which targets it when broadcasting), so the two can
     # never drift apart.
@@ -80,32 +92,62 @@ module Wavebird
       end
     end
 
-    # Browser-safe fields from a resolved {Types::Render} (blocking path). A fill
-    # without a render block (renderer instructions omitted) collapses to just
-    # +{ fill: true }+ once the nils are compacted away.
+    # Browser-safe fields from a resolved {Types::Render} (blocking path), shaped
+    # as +{ placement: { render: … } }+ because that is exactly what the hosted
+    # renderer reads, and what wavebird's own integration brief means by "returns
+    # the wavebird JSON response to the browser".
+    #
+    # Its +startTurn+ resolves the endpoint's answer with
+    # +placementFrom({decision: response})+, which reads +response.placement+;
+    # +renderFrom(p)+ then takes +p.render.frame_url+, falling back to rebuilding
+    # the URL from +p.asset_token+ — which this payload deliberately never
+    # carries. A flat +frame_url+ satisfies no branch, so the renderer resolves
+    # +null+ and silently paints nothing.
+    #
+    # A fill without a render block (renderer instructions omitted) collapses to
+    # just +{ fill: true }+ once the nils are compacted away.
     def from_render(render_info)
-      {
-        fill: true,
+      render = {
+        strategy: render_info&.strategy || HOSTED_FRAME,
         frame_url: render_info&.frame_url,
         script_url: render_info&.script_url,
+        media_type: render_info&.media_type,
         width: render_info&.width,
         height: render_info&.height,
+        aspect_ratio: render_info&.aspect_ratio,
         label_text: render_info&.label_text,
-        sponsor_name: render_info&.sponsor_name
+        sponsor_name: render_info&.sponsor_name,
+        click_url: render_info&.click_url
       }.compact
+      render.key?(:frame_url) ? { fill: true, placement: { render: render } } : { fill: true }
     end
 
     # Browser-safe fields from a decision (async path): the server builds
     # +frame_url+ from the +asset_token+ so the token stays server-side, and
-    # takes dimensions/sponsor from the decision's creative.
+    # takes dimensions/sponsor from the decision's creative. Shaped exactly like
+    # the blocking path so the hosted renderer sees one contract either way —
+    # this mirrors the render script's own +renderFrom+ fallback, which is what
+    # it would have built from the token had we sent it.
     def from_decision(decision)
+      frame_url = frame_url_for(decision.asset_token)
+      return { fill: true } if frame_url.nil?
+
+      { fill: true, placement: { render: decision_render(decision, frame_url) } }
+    end
+
+    # The render block the render script would have built for itself from the
+    # asset token (+renderFrom+'s fallback branch), assembled server-side so the
+    # token never crosses.
+    def decision_render(decision, frame_url)
       creative = decision.creative
+      width = creative&.width || DEFAULT_WIDTH
+      height = creative&.height || DEFAULT_HEIGHT
       {
-        fill: true,
-        frame_url: frame_url_for(decision.asset_token),
-        width: creative&.width,
-        height: creative&.height,
-        sponsor_name: creative&.sponsor_name
+        strategy: HOSTED_FRAME,
+        frame_url: frame_url,
+        script_url: "#{Wavebird.configuration.api_base_url}#{RENDER_JS_PATH}",
+        width: width, height: height, aspect_ratio: "#{width}/#{height}",
+        label_text: "Sponsored", sponsor_name: creative&.sponsor_name
       }.compact
     end
 
