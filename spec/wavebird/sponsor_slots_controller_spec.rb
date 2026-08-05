@@ -104,8 +104,10 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
   end
 
   describe "POST /wavebird/sponsor_slot on a fill without a render block" do
-    # A filled decision whose placement carries no hosted-frame render object —
-    # the payload is just { fill: true }, every render field compacted away.
+    # A filled decision whose placement carries no hosted-frame render object.
+    # There is nothing the renderer can mount — its startTurn discards a
+    # placement with no render and clears the slot — so the endpoint reports a
+    # no-fill rather than a fill the browser cannot act on.
     let(:renderless_fill) do
       {
         "slot_id" => "slot_1", "status" => "ready",
@@ -119,8 +121,8 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
       post_json("/wavebird/sponsor_slot", session_id: "sess_1")
     end
 
-    it "returns fill: true with no render fields" do
-      expect(json).to eq("fill" => true)
+    it "hides the slot instead of claiming an unrenderable fill" do
+      expect(json).to eq("fill" => false)
     end
   end
 

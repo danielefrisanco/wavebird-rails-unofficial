@@ -220,7 +220,7 @@ turned up: the example wavebird's own sandbox site generates carries
 `"timing": "before"`, so a host copy-pasting it would otherwise never learn the
 value is deprecated.
 
-### F7 — Placement/render descriptors are not validated
+### F7 — Placement/render descriptors are not validated — **fixed, differently than proposed**
 
 **Upstream.** `normalizeWavebirdPlacement` (`placement.ts`) validates before
 handing anything to a renderer: a `render` block is dropped entirely unless
@@ -239,9 +239,29 @@ being rejected server-side.
 defaults `label_text` itself — but it is a real difference in where the contract
 is enforced, and it is the class of gap that hid #017.
 
-**Options.** (a) Port the `hosted_frame` completeness check into `SlotPayload`
-(treat an incomplete render as no-fill). (b) Record as deliberate: the gem
-trusts the API response and lets the renderer decide.
+**Resolved 2026-08-05 (decision #021) — neither option as written.** Option (a)
+turned out to be wrong, and finding out why is the value of this finding.
+
+`normalizeWavebirdPlacement` is not on the path this payload feeds. The hosted
+renderer resolves a response with `placementFrom` → `renderFrom`, and
+`renderFrom` requires **only** `frame_url`, deriving everything else
+(`num(p.width)||300`, `aspect_ratio` from `w/h`, `p.ad_label_text||'Sponsored'`).
+`startTurn` uses that path too. The strict helper is for callers who render
+placements themselves — which this gem does not do. Porting its completeness
+rule would have made us *stricter than the renderer*, hiding ads it could have
+painted: a lost-fill bug introduced in the name of parity.
+
+What was actually wrong was the opposite end. A fill the payload could not render
+— no render block, or a blank `frame_url` — was reported as `{fill: true}` with
+nothing attached. That is a shape the renderer discards (`startTurn`'s
+`if(!p||!p.render)` → `clearPlacement`), so the slot stayed empty while the
+endpoint claimed a fill: the same class of silent, unactionable payload as #017.
+
+Fixed: an unrenderable fill is now `{fill: false}` on both paths, `frame_url` and
+`asset_token` are read with upstream's `readString` semantics (a blank string is
+absent, so no frame URL can end in a bare slash), and everything past `frame_url`
+is still passed through as the API sent it — wavebird's own script decides the
+rest.
 
 ### F8 — `x-csl-wrapper-version` value, and an extra `User-Agent`
 
@@ -338,7 +358,8 @@ core were already at parity. Everything found sat in the Ruby-side ergonomics of
 the fail-silent layer: five methods with no non-raising path (F1) and three
 fallback *values* differing in kind from upstream's (F2, F3, F4).
 
-**Status after 2026-08-05:** F1–F4 fixed under decision #018, F5 under #019, F6
-under #020, F8 and F12 fixed as documentation. **Still open: F7**
-(`hosted_frame` completeness not validated server-side). F9–F11 are
-noted-not-actioned.
+**Status after 2026-08-05: every actionable finding is closed.** F1–F4 under
+decision #018, F5 under #019, F6 under #020, F7 under #021 (which reversed the
+fix this document originally proposed — see the finding), F8 and F12 as
+documentation. F9–F11 are noted-not-actioned: two edge-case transport mechanics
+and one immaterial `nil` handling, none of which change observable behavior.

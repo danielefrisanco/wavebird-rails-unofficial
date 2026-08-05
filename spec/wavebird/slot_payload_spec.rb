@@ -35,14 +35,48 @@ RSpec.describe Wavebird::SlotPayload do
       )
     end
 
-    it "collapses a fill with no render block to just { fill: true }" do
+    # fill: true with nothing attached describes a state the renderer cannot act
+    # on -- startTurn discards a placement without a render and clears the slot --
+    # so the payload says no-fill rather than shipping a shape that paints
+    # nothing (the #017 class of bug).
+    it "reports a fill with no render block as a no-fill" do
       renderless = Wavebird::Types::PlacementResponse.from_api(
         "status" => "ready",
         "placement" => { "asset_token" => "at_secret" },
         "decision" => { "fill" => true }
       )
 
-      expect(described_class.call(renderless)).to eq(fill: true)
+      expect(described_class.call(renderless)).to eq(fill: false)
+    end
+
+    it "reports a render block with a blank frame_url as a no-fill" do
+      blank = Wavebird::Types::PlacementResponse.from_api(
+        "status" => "ready",
+        "placement" => { "asset_token" => "at_secret", "render" => { "frame_url" => "  " } },
+        "decision" => { "fill" => true }
+      )
+
+      expect(described_class.call(blank)).to eq(fill: false)
+    end
+
+    # Deliberately less strict than upstream's normalizeWavebirdPlacement, which
+    # drops a render block missing any of strategy/script_url/media_type/width/
+    # height/aspect_ratio/label_text. The hosted renderer does not use that
+    # helper: renderFrom needs only frame_url and derives the rest, so dropping a
+    # partial block here would hide an ad the renderer could paint.
+    it "forwards a render block carrying only a frame_url" do
+      sparse = Wavebird::Types::PlacementResponse.from_api(
+        "status" => "ready",
+        "placement" => { "asset_token" => "at_secret",
+                         "render" => { "frame_url" => "https://api.wavebird.ai/v1/render/at_secret" } },
+        "decision" => { "fill" => true }
+      )
+
+      expect(described_class.call(sparse)).to eq(
+        fill: true,
+        placement: { render: { strategy: "hosted_frame",
+                               frame_url: "https://api.wavebird.ai/v1/render/at_secret" } }
+      )
     end
   end
 
@@ -96,10 +130,10 @@ RSpec.describe Wavebird::SlotPayload do
       )
     end
 
-    it "omits frame_url when a fill decision carries no asset_token" do
+    it "reports a fill decision with no asset_token as a no-fill" do
       decision = Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => true)
 
-      expect(described_class.call(decision)).to eq(fill: true)
+      expect(described_class.call(decision)).to eq(fill: false)
     end
   end
 

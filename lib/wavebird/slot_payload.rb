@@ -115,22 +115,40 @@ module Wavebird
     # carries. A flat +frame_url+ satisfies no branch, so the renderer resolves
     # +null+ and silently paints nothing.
     #
-    # A fill without a render block (renderer instructions omitted) collapses to
-    # just +{ fill: true }+ once the nils are compacted away.
+    # A fill we cannot render — no render block, or one without a usable
+    # +frame_url+ — is reported as {no_fill}. Saying +fill: true+ with nothing
+    # attached would describe a state the renderer cannot act on: its own
+    # +startTurn+ discards a response whose placement has no +render+ and calls
+    # +clearPlacement+, so the slot stays empty either way. Naming it a no-fill
+    # keeps the payload honest and leaves no shape that paints nothing (#017).
+    #
+    # Beyond +frame_url+ the block is passed through as the API sent it, which is
+    # deliberately *less* strict than upstream's +normalizeWavebirdPlacement+
+    # (it drops a render block unless +strategy+, +script_url+, +media_type+,
+    # +width+, +height+, +aspect_ratio+ and +label_text+ are all present and
+    # well-typed). That helper is for callers who render placements themselves;
+    # the hosted renderer this payload feeds does not use it. Its own resolution
+    # (+renderFrom+) needs only +frame_url+ and derives the rest — +width || 300+,
+    # +aspect_ratio || "w/h"+, +label_text || "Sponsored"+. Enforcing the stricter
+    # rule here would hide ads the renderer could have painted, so the frame URL
+    # is the one thing required and wavebird's own script decides the rest.
     def from_render(render_info)
-      render = {
-        strategy: render_info&.strategy || HOSTED_FRAME,
-        frame_url: render_info&.frame_url,
-        script_url: render_info&.script_url,
-        media_type: render_info&.media_type,
-        width: render_info&.width,
-        height: render_info&.height,
-        aspect_ratio: render_info&.aspect_ratio,
-        label_text: render_info&.label_text,
-        sponsor_name: render_info&.sponsor_name,
-        click_url: render_info&.click_url
+      frame_url = present_string(render_info&.frame_url)
+      return no_fill if frame_url.nil?
+
+      { fill: true, placement: { render: passthrough_render(render_info, frame_url) } }
+    end
+
+    # The API's own render block, browser-safe fields only, with the frame URL
+    # already resolved by {from_render}.
+    def passthrough_render(render_info, frame_url)
+      {
+        strategy: render_info.strategy || HOSTED_FRAME, frame_url: frame_url,
+        script_url: render_info.script_url, media_type: render_info.media_type,
+        width: render_info.width, height: render_info.height,
+        aspect_ratio: render_info.aspect_ratio, label_text: render_info.label_text,
+        sponsor_name: render_info.sponsor_name, click_url: render_info.click_url
       }.compact
-      render.key?(:frame_url) ? { fill: true, placement: { render: render } } : { fill: true }
     end
 
     # Browser-safe fields from a decision (async path): the server builds
@@ -141,7 +159,7 @@ module Wavebird
     # it would have built from the token had we sent it.
     def from_decision(decision)
       frame_url = frame_url_for(decision.asset_token)
-      return { fill: true } if frame_url.nil?
+      return no_fill if frame_url.nil?
 
       { fill: true, placement: { render: decision_render(decision, frame_url) } }
     end
@@ -165,12 +183,23 @@ module Wavebird
     # Reconstructs the hosted-frame URL from an asset token, mirroring the render
     # script's +renderFrom+ (+{origin}/v1/render/{encoded token}+).
     def frame_url_for(asset_token)
+      asset_token = present_string(asset_token)
       return if asset_token.nil?
 
       base = Wavebird.configuration.api_base_url
       # Path-segment-safe encoding (spaces -> %20, not +), matching the client's
       # own URL building (Client#encode) so async and blocking agree.
       "#{base}#{RENDER_PATH}/#{CGI.escapeURIComponent(asset_token)}"
+    end
+
+    # Upstream's +readString+: a non-blank string, trimmed. Anything else — nil,
+    # an empty string, a number — counts as absent, so a blank +asset_token+
+    # cannot become a frame URL ending in a bare slash.
+    #
+    # @param value [Object]
+    # @return [String, nil]
+    def present_string(value)
+      value.is_a?(String) && !value.strip.empty? ? value.strip : nil
     end
   end
 end

@@ -104,7 +104,7 @@ divergence to fix: it is the same boundary upstream draws.
 
 | TS export | Ruby | Decision |
 |---|---|---|
-| `normalizeWavebirdPlacement` | internal normalization inside value objects | adapt (not public API) |
+| `normalizeWavebirdPlacement` | internal normalization inside value objects; its *strict* render-completeness rule deliberately not ported (#021) — the hosted renderer's own `renderFrom` needs only `frame_url`, so enforcing more would hide fills it could paint. `SlotPayload` requires a usable `frame_url` and reports anything else as a no-fill | adapt (not public API) |
 | `resolveAdTimingPlan` (deprecated upstream) | not ported | skip — deprecated in origin |
 | `warnSdkDeprecation` (`deprecation.ts`) | `Wavebird::Deprecation.warn_once` — same key format, same once-per-process registry, writing to `config.logger` instead of `console.warn` | port (adapted) — #020; drives the `timing: before\|after` warning |
 | `WavebirdSdkError` / `WavebirdSdkErrorCode` | `Wavebird::Error` hierarchy + API-code exceptions (pending Q1) | adapt |

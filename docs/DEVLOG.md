@@ -81,10 +81,33 @@ SDK, then for the findings written down, then for the divergences fixed.
   should still hear it), and `Wavebird.reset_configuration!` clears the registry
   so one example cannot silence another.
 
+**Then F7 — the finding that was wrong, and the bug underneath it (decision #021)**
+- The findings doc proposed porting `normalizeWavebirdPlacement`'s strict render
+  validation into `SlotPayload`. Re-reading the renderer before implementing
+  showed that would have been a *bug*: that helper is not on this path. The
+  hosted script resolves through `placementFrom` → `renderFrom`, which needs only
+  `frame_url` and derives the rest (`num(p.width)||300`, `aspect_ratio` from
+  `w/h`, `ad_label_text||'Sponsored'`). Being stricter than the renderer we feed
+  would hide fills it could paint — a revenue bug committed in the name of parity.
+- **The real defect was the mirror image.** A fill we could not render — no
+  render block, or a blank `frame_url` — went out as `{fill: true}` with nothing
+  attached. The renderer discards exactly that (`if(!p||!p.render)` →
+  `clearPlacement`), so the slot stayed empty while the endpoint claimed a fill.
+  Same class as #017, invisible for the same reason. Now `{fill: false}` on both
+  paths, with upstream's `readString` semantics on `frame_url`/`asset_token` so a
+  blank token cannot produce a frame URL ending in a bare slash.
+- Lesson worth keeping: "upstream has a validator, we don't" is not by itself a
+  parity gap. The question is which of upstream's paths our code is actually
+  standing in for. Two of the twelve findings changed shape once asked that way.
+
+**Where the review landed**
+- Every actionable finding is closed: F1–F4 (#018), F5 (#019), F6 (#020),
+  F7 (#021), F8 and F12 as documentation. F9–F11 stay noted-not-actioned — two
+  transport edge cases and one immaterial `nil`, none observable.
+
 **Todo**
-- F7 (`hosted_frame` completeness validation) is scoped in the findings doc,
-  undecided.
-- Merge `parity-fail-silent` once reviewed.
+- Merge `parity-fail-silent` once reviewed; it is four commits and has no remote.
+- `/code-review ultra` has still only seen through `55563e0`.
 
 ## 2026-08-04 — Phase 10 close-out: first live sandbox run, and the bug it found
 
