@@ -174,7 +174,7 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 
 | Method | Endpoint | Notes |
 |---|---|---|
-| `create_placement(job_type:, wait_ms:, session_id:, slots_requested:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
+| `create_placement(job_type:, wait_ms:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
 | `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting. This route carries consent as `overrides.gdpr_applies` only — other flags are logged, not sent; use `create_placement` for the full object |
 | `decision(slot_id, wait_ms:)` | `GET /v1/decisions/{slot_id}` | one poll; `wait_ms: 0` for a short poll |
 | `await_decision(slot_id)` | `GET /v1/decisions/{slot_id}` | upstream polling ladder; raises `DecisionTimeoutError` on budget exhaustion |
@@ -258,9 +258,12 @@ These are wavebird's own product rules, baked in as behavior rather than advice:
 
 - **No prompts, chat history, user ids, emails or account data are ever sent.**
   The client's public API deliberately has no parameter that invites it. The
-  server endpoint accepts only a whitelisted slot context from the browser; the
-  closest thing to content is `create_job`'s optional `topic:` — a single
-  semantic hint you choose server-side, never the user's text.
+  closest thing to content is the optional `topic:` on `create_placement` /
+  `create_job` — a single coarse hint like `"cloud hosting"`, never the user's
+  text. It is a **server-side** argument: the engine endpoint does not accept a
+  topic from the browser, so page content cannot reach the ad network by
+  accident. To use it, call the client from your own controller, where you know
+  what the turn is about.
 - **The secret key is unreachable from the browser.** It lives only in your
   server-side config, is never rendered into HTML or JSON, and is redacted from
   `Configuration#inspect`. A boot-time guard raises `ConfigurationError` if the

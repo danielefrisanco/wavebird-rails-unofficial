@@ -50,9 +50,24 @@ SDK, then for the findings written down, then for the divergences fixed.
 - System suite: 18 examples, 0 failures. RuboCop clean over `lib/`, `app/`,
   `spec/`. YARD 100 % documented.
 
+**Then, same day — F5 settled by asking the sandbox (decision #019)**
+- No document states the `/v1/placements` request schema, so a probe script sent
+  the gem's baseline body plus one variant per field with the `sk_test_` key.
+  `locale` and `prompt: {topic:}` → 200; an unknown field at either level →
+  `400 validation_error`. Those controls are the point: without them a 200 could
+  have meant "ignored". `create_placement` now takes `topic:` and `locale:`.
+- Fetched the hosted Script Tag (`wavebird.js`, 32 KB) while at it: it drives
+  `/v1/jobs` + `/v1/decisions/{slot_id}` with the *legacy wrapper ingress* body
+  (`chat_session_id`, `slot_config`, `delivery: {mode: "polling"}`) and never
+  touches `/v1/placements`. So wavebird's own Script Tag runs the same
+  create-job-then-poll route we ported, and it tells us nothing about the
+  placements schema — the sandbox was the only way to know.
+- Left out on Daniele's call: no `default_locale` config, and the endpoint still
+  refuses a browser-supplied `topic` (upstream builds it from a server-side
+  argument; the Script Tag's page-supplied version runs under a different trust
+  model).
+
 **Todo**
-- F5 (`topic:`/`locale:` on `create_placement`) needs wavebird to confirm the
-  `/v1/placements` body accepts them — the integration brief's example omits both.
 - F6 (deprecation warning for `timing: before|after`) and F7 (`hosted_frame`
   completeness validation) are scoped in the findings doc, undecided.
 - Merge `parity-fail-silent` once reviewed.

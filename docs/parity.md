@@ -74,6 +74,17 @@ caller bug rather than a wavebird failure.
 | `createDecisionWsTicket` + `getDecisionViaWebSocket` (private) | wrapper WS ticket + per-slot socket | not ported in v1 | #001 (approved; deferred todo) |
 | `sendLegacyBeacon` (private) | `/public/wrapper/v1/beacons` | not ported | legacy transport |
 
+**Legacy-only request fields, not exposed by this client.** Upstream's
+`createV1JobRequest` treats several `JobRequest` fields as signals to *leave* the
+canonical route: supplying `predicted_latency_ms`, `model_id`, `verification`,
+`callback_url`, `routing.candidate_partner_ids`, `prompt.token_count_estimate`,
+or any consent flag beyond `gdpr_applies` makes `canUseCanonicalRequest` false
+(wavebird-client.ts:308–317) and sends the legacy wrapper ingress body instead.
+The canonical `/v1/jobs` and `/v1/placements` bodies have no position for them —
+confirmed by the sandbox's own generated example, which carries none — so a
+canonical-only client cannot express them, and none are exposed here. Not a
+divergence to fix: it is the same boundary upstream draws.
+
 ## Response normalization (behavioral parity details from source)
 
 - Decision: `status:"pending"` + `decision:null` → pending result; `fill:false`
@@ -144,7 +155,7 @@ upstream source in `upstream/wavebird/src/`. **Confirmed at parity:**
 
 | Area | Upstream | Gem | Why |
 |---|---|---|---|
-| `prompt.text` | canonical job request accepts `prompt.text` (from `params.prompt` or `context.prompt_text`) | only `topic:` is exposed; there is no parameter that accepts user text | Build prompt §4: "the client's public API should not even have a parameter that invites this by accident." A narrowing, and intentional. |
+| `prompt.text` | canonical job request accepts `prompt.text` (from `params.prompt` or `context.prompt_text`) | only `topic:` is exposed — on both `create_placement` and `create_job` (#019) — and there is no parameter that accepts user text | Build prompt §4: "the client's public API should not even have a parameter that invites this by accident." A narrowing, and intentional. |
 | `overrides` sub-keys | ~12 individually typed fields (`allowed_formats`, `bidfloor`, `timing`, `frequency_cap`, `targeting`, `pacing`, `blocked_*`, …) | one free-form `overrides:` Hash merged over `config.default_overrides` | Every upstream key remains expressible; typing them in Ruby would freeze a contract that upstream still evolves. |
 | non-finite numeric config | `clampInt` silently falls back to the default | raises `ConfigurationError` | `Float::INFINITY` for a timeout is a caller bug, not a default. Consistent with the existing "non-numeric raises" rule. |
 | `asset_token → slot_id` memo | client remembers the mapping to backfill beacon `slot_id` | not ported | Beacons are an escape hatch here (the hosted renderer sends its own); `slot_id` is a required keyword instead. Was already flagged low-priority in Phase 0. |

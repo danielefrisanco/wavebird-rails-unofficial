@@ -55,6 +55,32 @@ RSpec.describe Wavebird::Client, "#create_placement" do
     expect(response.placement).to be_nil
   end
 
+  # The canonical job body carries both (upstream createV1JobRequest), and the
+  # placements route accepts them — verified against the sandbox on 2026-08-05,
+  # where an unknown field in the same position is rejected with a 400.
+  it "sends topic as prompt.topic and the locale hint, like create_job" do
+    stub = stub_request(:post, placements_url)
+           .with(query: hash_including("wait_ms"),
+                 body: { client_id: "wbproj_spec", job_type: "chat", locale: "de-DE", slots_requested: 1,
+                         prompt: { topic: "cloud hosting" } })
+           .to_return(status: 200, body: JSON.generate(fill_response))
+
+    client.create_placement(job_type: "chat", topic: "cloud hosting", locale: "de-DE")
+
+    expect(stub).to have_been_requested
+  end
+
+  it "omits prompt and locale when the caller sends neither" do
+    stub = stub_request(:post, placements_url)
+           .with(query: hash_including("wait_ms"),
+                 body: { client_id: "wbproj_spec", job_type: "chat", slots_requested: 1 })
+           .to_return(status: 200, body: JSON.generate(fill_response))
+
+    client.create_placement(job_type: "chat")
+
+    expect(stub).to have_been_requested
+  end
+
   it "clamps wait_ms to the shared 0..5000 range and stretches the HTTP timeout" do
     stub = stub_request(:post, placements_url).with(query: { "wait_ms" => "5000" })
                                               .to_return(status: 200, body: JSON.generate(fill_response))

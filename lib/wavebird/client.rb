@@ -88,18 +88,23 @@ module Wavebird
     # @param wait_ms [Integer, nil] server-side wait for the first decision;
     #   defaults to +config.long_poll_wait_ms+, clamped to the same 0..5000 range
     # @param session_id [String, nil]
+    # @param locale [String, nil] e.g. +"en-US"+; picks creatives and disclosures
     # @param slots_requested [Integer]
+    # @param topic [String, nil] semantic topic hint, sent as +prompt.topic+, as
+    #   in {#create_job}. A coarse subject ("cloud hosting"), never the user's
+    #   message: there is deliberately no parameter for that (build prompt §4)
     # @param slot_hint [Hash, nil] defaults to +config.default_slot_hint+
     # @param overrides [Hash, nil] merged over +config.default_overrides+
     # @param publisher [Hash, nil] merged over +config.default_publisher+ into
     #   +overrides.publisher+ (parity with upstream job building)
     # @param consent [Hash, nil] per-request consent flags
     # @return [Types::PlacementResponse]
-    def create_placement(job_type:, wait_ms: nil, session_id: nil, slots_requested: 1,
-                         slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
+    def create_placement(job_type:, wait_ms: nil, session_id: nil, locale: nil, slots_requested: 1,
+                         topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       wait = clamp_wait_ms(wait_ms.nil? ? config.long_poll_wait_ms : wait_ms)
-      body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type,
-                     slots_requested: slots_requested, slot_hint: slot_hint || config.default_slot_hint,
+      body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
+                     slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
+                     slot_hint: slot_hint || config.default_slot_hint,
                      overrides: merged_overrides(overrides, publisher), consent: consent)
       response = request(:post, "/v1/placements", body: body, query: { wait_ms: wait },
                                                   timeout_ms: config.timeout_ms + wait)

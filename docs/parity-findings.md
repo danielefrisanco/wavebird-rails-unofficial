@@ -150,7 +150,7 @@ escape hatch here, since the hosted renderer sends its own.
 `{accepted: false, reason_code: "SDK_FAIL_SILENT"}` as a `Types::BeaconResult`,
 so callers read `accepted?` rather than nil-checking.
 
-### F5 — `create_placement` cannot send `topic` or `locale`
+### F5 — `create_placement` cannot send `topic` or `locale` — **fixed**
 
 **Upstream.** The canonical job body carries `locale` and `prompt.topic`
 (`wavebird-client.ts:385`).
@@ -167,9 +167,36 @@ example body lists only `client_id`, `session_id`, `job_type`,
 (`docs/upstream/llm-integration-brief.md:98`) — neither field appears. But the
 asymmetry between our own two methods is untracked.
 
-**Options.** (a) Add `topic:`/`locale:` to `create_placement` (needs
-confirmation that `/v1/placements` accepts them — ask wavebird or test against
-the sandbox). (b) Record the asymmetry as intentional and say why in the README.
+**Resolved — option (a), after verifying against the sandbox (2026-08-05).** The
+docs never state the placements request schema, so it was settled empirically
+with the `sk_test_` key, using controls so a `200` could not be mistaken for the
+API silently ignoring an unknown key:
+
+| Body | Result |
+|---|---|
+| baseline (what the gem sent before) | `200`, `status: "ready"` |
+| `+ locale: "en-US"` | `200` |
+| `+ prompt: {topic: …}` | `200` |
+| `+ both` | `200` |
+| control: `+ zzz_not_a_real_field` (top level) | `400 validation_error` |
+| control: `+ prompt: {zzz_not_a_real_field}` | `400 validation_error` |
+
+The route validates strictly at both levels, so the accepted fields are really
+accepted. `create_placement` now takes `topic:` and `locale:`, building the same
+`prompt: {topic:}` shape as `create_job`.
+
+**Deliberately left out:** the engine endpoint still does not accept a `topic`
+from the browser, and no `default_locale` config was added. Upstream builds
+`prompt.topic` from a server-side caller argument; the only place a page supplies
+one is the Script Tag, a different trust model (origin-bound publishable key, no
+secret). A per-turn topic therefore belongs in a host's own controller call.
+
+**Also learned, fetching the Script Tag (`https://wavebird.ai/wavebird.js`):** it
+uses `/v1/jobs` + `/v1/decisions/{slot_id}` — never `/v1/placements` — with the
+legacy wrapper ingress body shape (`chat_session_id`, `slot_config`,
+`delivery: {mode: "polling"}`). So wavebird's own second-tier integration runs
+the same create-job-then-poll route this gem ports, and the Script Tag says
+nothing about the placements schema.
 
 ### F6 — No deprecation warning for legacy `timing` values
 
@@ -302,8 +329,7 @@ core were already at parity. Everything found sat in the Ruby-side ergonomics of
 the fail-silent layer: five methods with no non-raising path (F1) and three
 fallback *values* differing in kind from upstream's (F2, F3, F4).
 
-**Status after 2026-08-05:** F1–F4 fixed under decision #018; F8 and F12 fixed as
-documentation. **Still open: F5** (`topic:`/`locale:` on `create_placement` —
-needs confirmation that `/v1/placements` accepts them), **F6** (no deprecation
-warning for legacy `timing` values), **F7** (`hosted_frame` completeness not
-validated server-side). F9–F11 are noted-not-actioned.
+**Status after 2026-08-05:** F1–F4 fixed under decision #018, F5 under #019, F8
+and F12 fixed as documentation. **Still open: F6** (no deprecation warning for
+legacy `timing` values) and **F7** (`hosted_frame` completeness not validated
+server-side). F9–F11 are noted-not-actioned.

@@ -18,7 +18,9 @@ wavebird's canonical REST v1 API.
 #### API client
 
 - `Wavebird::Client` — Faraday-based client for the canonical v1 endpoints:
-  `#create_placement` (`POST /v1/placements`), `#create_job` (`POST /v1/jobs`),
+  `#create_placement` (`POST /v1/placements`, with the same `topic:`/`locale:`
+  hints as the jobs route — both verified accepted by the API),
+  `#create_job` (`POST /v1/jobs`),
   `#decision` and `#await_decision` (`GET /v1/decisions/{slot_id}`),
   `#record_beacon` (`POST /v1/beacons`), `#report_generation`
   (`POST /v1/jobs/{job_id}/generation/{event}`), `#record_consent`
