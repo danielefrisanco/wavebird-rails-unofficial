@@ -77,11 +77,20 @@ module Wavebird
       "wavebird_slot_#{position}_#{token}"
     end
 
+    # The browser-safe payload for "show nothing". Every path that has to hide a
+    # slot — an honest no-fill, a swallowed failure, a rate limit — answers with
+    # this one shape, so the renderer only ever sees a fill or its absence.
+    #
+    # @return [Hash]
+    def no_fill
+      { fill: false }
+    end
+
     # @param source [Types::PlacementResponse, Types::Decision] a fill/no-fill
     #   carrier responding to +fill?+
-    # @return [Hash] +{ fill: false }+ or the browser-safe render fields
+    # @return [Hash] {no_fill} or the browser-safe render fields
     def call(source)
-      return { fill: false } unless source.fill?
+      return no_fill unless source.fill?
 
       # A placement response (blocking path) carries a resolved hosted-frame
       # +render+; a decision (async path) carries the raw +asset_token+ instead.

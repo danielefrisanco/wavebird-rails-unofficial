@@ -30,14 +30,21 @@ wavebird's canonical REST v1 API.
   `decision_timeout_ms`. Failed polls are reported and polling continues.
 - `Wavebird::Facade` (what `Wavebird.client` returns) — the fail-silent layer
   that restores the upstream SDK's posture: every failure is reported through
-  `on_error`/`logger` and returned as a synthetic no-fill, so a wavebird outage
-  is indistinguishable from an empty auction and never breaks the host flow.
+  `on_error`/`logger` and returned as a "hide the slot and continue" value, so a
+  wavebird outage is indistinguishable from an empty auction and never breaks the
+  host flow. It mirrors the whole `Client` surface, and its fallbacks are
+  upstream's own: a pending decision when the polling budget runs out,
+  `{accepted: false, reason_code: "SDK_FAIL_SILENT"}` for a beacon, `false` for
+  `report_generation`, and `Types::RateLimited` — logged at `warn`, never through
+  `on_error` — when job creation is throttled.
 - `Wavebird::DecisionNormalizer` — port of upstream `normalizeV1Decision`,
   including its validation rules and creative defaults.
 - `Wavebird::Types` value objects mirroring the upstream public contracts
   field-for-field: `PlacementResponse` (null placement = first-class no-fill),
   `Placement`, `Render`, `Decision`, `Creative`, `NativeAssets`, `AcceptedJob`,
-  `BeaconResult`, `ConsentState`, `BrowserActivation`, `ProjectConfig`. Tolerant
+  `RateLimited` (the other branch of upstream's `JobResponse` union, discriminated
+  by `rate_limited?`), `BeaconResult`, `ConsentState`, `BrowserActivation`,
+  `ProjectConfig`. Tolerant
   reads (unknown fields kept in `raw`), with `asset_token`/`frame_url` redacted
   from all inspection output.
 - `Wavebird::Configuration` + `Wavebird.configure` — defaults and numeric

@@ -246,6 +246,26 @@ RSpec.describe Wavebird::SponsorSlotsController, type: :request do
       end
     end
 
+    # A 429 is the API asking us to back off. Upstream's createJob answers it
+    # with a rate-limit value rather than an error, and retrying the same work
+    # through the blocking path would just spend the next 429.
+    context "when the jobs endpoint rate limits the request" do
+      before do
+        stub_const("Turbo::StreamsChannel", Class.new)
+        allow(Wavebird::DecisionPollJob).to receive(:perform_later)
+        stub_jobs.to_return(status: 429, headers: { "Retry-After" => "30" },
+                            body: JSON.generate("error" => "rate_limited"))
+      end
+
+      it "hides the slot instead of retrying through the blocking path" do
+        post_json("/wavebird/sponsor_slot", session_id: "sess_1", mode: "async", position: "below")
+
+        expect(json).to eq("fill" => false)
+        expect(a_request(:post, placements_url)).not_to have_been_made
+        expect(Wavebird::DecisionPollJob).not_to have_received(:perform_later)
+      end
+    end
+
     # Without a session id the stream could only be named for the position, which
     # is exactly the shared-channel bug. Blocking delivery needs no stream at all,
     # so it degrades there rather than broadcasting to everyone.

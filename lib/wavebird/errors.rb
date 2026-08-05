@@ -43,9 +43,10 @@ module Wavebird
   class InvalidResponseError < Error; end
 
   # {Client#await_decision} exhausted the +decision_timeout_ms+ polling budget
-  # (upstream +sdk_decision_timeout+; upstream returns a pending fallback —
-  # the raise-y low-level client raises instead, per decision #003, and the
-  # fail-silent facade converts it back to a pending outcome).
+  # (upstream +sdk_decision_timeout+). Upstream reports the error and returns a
+  # *pending* fallback (+status: "pending"+, +fill: nil+); the raise-y low-level
+  # client raises instead, per decision #003, and the fail-silent facade catches
+  # it and returns that same pending fallback (decision #018).
   class DecisionTimeoutError < Error; end
 
   # API returned an error envelope with an unrecognized code (fallback class).

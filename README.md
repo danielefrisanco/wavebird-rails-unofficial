@@ -147,14 +147,26 @@ end
 ### `Wavebird::Facade` — fail-silent (what `Wavebird.client` returns)
 
 Every method swallows `Wavebird::Error`, reports it via `on_error`/`logger`, and
-returns a "hide the slot and continue" value. Use this in request paths.
+returns a "hide the slot and continue" value. Use this in request paths. The
+whole `Client` surface is mirrored here, because upstream's whole surface is
+fail-silent — a method available only in its raising form would let the ad path
+break your flow.
 
 | Method | Returns | On failure |
 |---|---|---|
 | `create_placement(**)` | `Types::PlacementResponse` | synthetic no-fill response |
-| `create_job(**)` | `Types::AcceptedJob`, `nil` | `nil` |
-| `await_decision(slot_id)` | `Types::Decision` | synthetic no-fill decision |
-| `record_beacon(**)` | `Types::BeaconResult`, `nil` | `nil` |
+| `create_job(**)` | `Types::AcceptedJob`, `Types::RateLimited`, `nil` | `nil` — except a 429, which returns `Types::RateLimited` (a result, not a failure: logged at `warn`, no `on_error`) |
+| `decision(slot_id, **)` | `Types::Decision` | synthetic pending decision |
+| `await_decision(slot_id)` | `Types::Decision` | synthetic pending decision (upstream's `fallbackDecision`) |
+| `record_beacon(**)` | `Types::BeaconResult` | `accepted: false`, `reason_code: "SDK_FAIL_SILENT"` |
+| `report_generation(job_id, event, **)` | `true` | `false` |
+| `record_consent(**)` | `Types::ConsentState`, `nil` | `nil` |
+| `activate_browser(**)` | `Types::BrowserActivation`, `nil` | `nil` |
+| `project_config(**)` | `Types::ProjectConfig`, `nil` | `nil` |
+
+`ArgumentError` is **not** swallowed: an event outside the canonical enum is a
+caller bug, not a wavebird failure (upstream's compiler rejects it before the
+call is made).
 
 ### `Wavebird::Client` — raising (typed errors)
 
@@ -163,7 +175,7 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 | Method | Endpoint | Notes |
 |---|---|---|
 | `create_placement(job_type:, wait_ms:, session_id:, slots_requested:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
-| `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting |
+| `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting. This route carries consent as `overrides.gdpr_applies` only — other flags are logged, not sent; use `create_placement` for the full object |
 | `decision(slot_id, wait_ms:)` | `GET /v1/decisions/{slot_id}` | one poll; `wait_ms: 0` for a short poll |
 | `await_decision(slot_id)` | `GET /v1/decisions/{slot_id}` | upstream polling ladder; raises `DecisionTimeoutError` on budget exhaustion |
 | `record_beacon(slot_id:, asset_token:, event:, beacon_id:, occurred_at:, metadata:)` | `POST /v1/beacons` | advanced — the hosted renderer already beacons; don't duplicate |

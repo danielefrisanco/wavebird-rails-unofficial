@@ -211,6 +211,49 @@ module Wavebird
       def self.from_api(hash)
         new(**Types.members_from(self, hash), raw: hash)
       end
+
+      # Discriminator for upstream's +JobResponse+ union, answered by both
+      # branches so callers can branch on the value instead of its class.
+      #
+      # @return [Boolean] always +false+ — this branch is an accepted job
+      def rate_limited?
+        false
+      end
+    end
+
+    # Rate-limit outcome of +POST /v1/jobs+ (upstream +RateLimitedJobResponse+,
+    # the other branch of its +JobResponse+ union).
+    #
+    # Upstream treats a 429 on job creation as a *result*, not a failure: it
+    # returns +{error: "rate_limit_exceeded", retry_after_ms}+ and logs a
+    # warning, without notifying +onError+. {Wavebird::Facade#create_job}
+    # returns this for the same case, so "we are throttled, back off" stays
+    # distinguishable from "something went wrong".
+    #
+    # +retry_after+ is in **seconds** (upstream exposes milliseconds), matching
+    # the parsed +Retry-After+ carried by {Wavebird::RateLimitedError}.
+    RateLimited = Data.define(:error, :retry_after, :raw) do
+      include SafeInspect
+
+      # @param hash [Hash] response body or equivalent
+      # @return [RateLimited]
+      def self.from_api(hash)
+        new(**Types.members_from(self, hash), raw: hash)
+      end
+
+      # Builds the outcome from a parsed +Retry-After+, naming the upstream
+      # error code in one place.
+      #
+      # @param retry_after [Numeric, nil] seconds to wait before retrying
+      # @return [RateLimited]
+      def self.from_retry_after(retry_after)
+        from_api("error" => "rate_limit_exceeded", "retry_after" => retry_after)
+      end
+
+      # @return [Boolean] always +true+ — this branch is a rate limit
+      def rate_limited?
+        true
+      end
     end
 
     # Acknowledgement from +POST /v1/beacons+. Members cover the documented

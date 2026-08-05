@@ -49,6 +49,10 @@ module Wavebird
     # fails silently to +nil+) so the slot still resolves.
     def async_response
       job = Wavebird.client.create_job(**job_args)
+      # A rate limit is the API asking us to back off, not a failure to route
+      # around: falling through to the blocking path would spend the next 429 on
+      # the same slot. Hide it instead and let the next turn try again.
+      return render(json: SlotPayload.no_fill) if job&.rate_limited?
       return blocking_response if job.nil? || job.slot_ids.empty?
 
       DecisionPollJob.perform_later(job.slot_ids.first, stream_name, position)

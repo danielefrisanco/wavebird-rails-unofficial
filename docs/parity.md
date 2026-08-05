@@ -25,7 +25,7 @@ its legacy wrapper transport (`/public/wrapper/v1/*`).
 | `options.short_poll_interval_ms` (default 250, clamp 100..5000) | `config.short_poll_interval_ms` | port | Same |
 | `options.onError` (observer for swallowed errors) | `config.on_error` callable | port | Core to fail-silent design (see below) |
 | `options.logLevel` / `logger` | `config.logger` (Rails logger default) | port (adapted) | Redaction rules apply (asset_token, secret) |
-| `options.wrapper_version` → `x-csl-wrapper-version` header | send `wavebird-rails/VERSION` equivalent | port (adapted) | Verify server accepts arbitrary values; else mirror `"sdk"` |
+| `options.wrapper_version` (default `"sdk"`) → `x-csl-wrapper-version` header | `config.wrapper_version`, default `wavebird-rails/VERSION`, sent as both `x-csl-wrapper-version` and `User-Agent` | port (adapted) | **Verified 2026-08-04:** the live sandbox run rendered a real ad with this value, so the API accepts a non-`"sdk"` wrapper version — no need to mirror `"sdk"` (see `docs/parity-findings.md` F8) |
 
 ## Fail-silent posture (behavioral core — must match)
 
@@ -42,6 +42,22 @@ catches `Wavebird::Error`, reports through `on_error` + logger, and returns a
 no-fill outcome so the host flow is never broken. The engine's
 `SponsorSlotsController` uses the facade, so a wavebird failure surfaces to the
 browser as `{ fill: false }` with 200.
+
+**Coverage and fallback values (decision #018, 2026-08-05).** The facade mirrors
+*every* `Client` method, since upstream's whole surface is fail-silent, and its
+fallback values match upstream's rather than being convenient Ruby nils:
+
+| Method | Upstream fallback | Facade fallback |
+|---|---|---|
+| `create_job` | 429 → `{error: "rate_limit_exceeded", retry_after_ms}` + `warn`, never `onError`; other failures → `null` | `Types::RateLimited` (seconds, not ms) + `warn`, never `on_error`; other failures → `nil` |
+| `decision` / `await_decision` | `fallbackDecision` = `{slot_id, status: "pending", fill: null}` | identical pending `Types::Decision` |
+| `record_beacon` | `fallbackBeacon` = `{accepted: false, reason_code: "SDK_FAIL_SILENT"}` | identical `Types::BeaconResult` |
+| `report_generation` | `void`, `@throws Never` | `true`/`false` |
+| `record_consent`, `activate_browser`, `project_config` | no upstream equivalent | `nil` |
+
+`ArgumentError` (an event outside a canonical enum) is deliberately *not*
+swallowed at either layer: upstream rejects it at compile time, so it is a
+caller bug rather than a wavebird failure.
 
 ## Client methods
 

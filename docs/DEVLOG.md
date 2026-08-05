@@ -2,6 +2,61 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-08-05 — Parity re-review, and closing the fail-silent gaps (branch `parity-fail-silent`)
+
+Daniele asked for a fresh parity review of the whole API against the original
+SDK, then for the findings written down, then for the divergences fixed.
+
+**Done**
+- **`docs/parity-findings.md`** — an independent re-walk of upstream
+  `src/` against the shipped gem: 13 areas confirmed at parity, the 11 recorded
+  divergences restated, and 12 findings that were in neither document.
+- **Documentation-only fixes (F8, F12)** — the `create_job` README row regained
+  `consent:` (drift since #014); `docs/parity.md`'s "verify the server accepts
+  arbitrary `wrapper_version` values" caveat was answered by the 2026-08-04
+  sandbox run, which rendered a real ad with `wavebird-rails/{VERSION}` in the
+  header; the `DecisionTimeoutError` comment stopped describing a pending
+  fallback the facade did not produce.
+- **F1–F4 fixed (decision #018)** — the fail-silent layer now covers the whole
+  client surface with upstream's own fallback values: five methods gained
+  non-raising forms, a 429 on `create_job` returns `Types::RateLimited` instead
+  of `nil` (warn, not `on_error`, as upstream), the decision-timeout fallback is
+  pending rather than a fabricated no-fill, and a failed beacon returns
+  `{accepted: false, reason_code: "SDK_FAIL_SILENT"}`.
+- **`SlotPayload.no_fill`** — the `{fill: false}` literal now has one home, used
+  by the payload projection and by the endpoint's rate-limit path.
+
+**Problems found**
+- **`report_generation` was reachable only in its raising form.** Upstream
+  documents it `@throws Never` and it is called from inside the host's
+  generation loop — so the one method most likely to sit in a chat turn was the
+  one that could take the turn down. The facade covered 4 of 9 methods and
+  nobody had asked why the other 5 were missing.
+- **We had invented three fallback values.** `nil` for a beacon, a *ready
+  no-fill* for an exhausted polling budget, `nil` for a rate limit. Each looked
+  reasonable in isolation; each said something upstream does not say. The
+  decision-timeout one asserted a verdict the auction never delivered.
+- **A rate limit was being treated as a failure.** Upstream is explicit — 429 on
+  `createJob` is a typed *result* and deliberately bypasses `onError`. The
+  endpoint would also have retried a throttled async job through the blocking
+  path, spending the next 429 immediately.
+- **Constants inside `Data.define do … end` do not scope to the class** (block
+  bodies keep the enclosing lexical scope), so `RateLimited::ERROR_CODE` would
+  have quietly become `Types::ERROR_CODE`. Replaced with a
+  `RateLimited.from_retry_after` constructor that names the code once.
+
+**Verification**
+- Unit + request suite: 398 examples, 0 failures, 100 % line + branch.
+- System suite: 18 examples, 0 failures. RuboCop clean over `lib/`, `app/`,
+  `spec/`. YARD 100 % documented.
+
+**Todo**
+- F5 (`topic:`/`locale:` on `create_placement`) needs wavebird to confirm the
+  `/v1/placements` body accepts them — the integration brief's example omits both.
+- F6 (deprecation warning for `timing: before|after`) and F7 (`hosted_frame`
+  completeness validation) are scoped in the findings doc, undecided.
+- Merge `parity-fail-silent` once reviewed.
+
 ## 2026-08-04 — Phase 10 close-out: first live sandbox run, and the bug it found
 
 Daniele asked for something the plan had deferred all build long: *"a chat example
