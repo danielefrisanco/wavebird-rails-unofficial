@@ -41,6 +41,9 @@ wavebird's canonical REST v1 API.
   `on_error` — when job creation is throttled.
 - `Wavebird::DecisionNormalizer` — port of upstream `normalizeV1Decision`,
   including its validation rules and creative defaults.
+- `Wavebird::Deprecation` — port of upstream `warnSdkDeprecation`: announces a
+  deprecation once per process through `config.logger`. Drives the warning for
+  `overrides.timing: "before"`/`"after"`, whose recommended value is `"during"`.
 - `Wavebird::Types` value objects mirroring the upstream public contracts
   field-for-field: `PlacementResponse` (null placement = first-class no-fill),
   `Placement`, `Render`, `Decision`, `Creative`, `NativeAssets`, `AcceptedJob`,

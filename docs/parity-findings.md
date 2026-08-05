@@ -198,7 +198,7 @@ legacy wrapper ingress body shape (`chat_session_id`, `slot_config`,
 the same create-job-then-poll route this gem ports, and the Script Tag says
 nothing about the placements schema.
 
-### F6 — No deprecation warning for legacy `timing` values
+### F6 — No deprecation warning for legacy `timing` values — **fixed**
 
 **Upstream.** `timing: "before" | "after"` triggers a one-time
 `warnSdkDeprecation` naming `"during"` as the recommended value
@@ -207,9 +207,18 @@ nothing about the placements schema.
 **Gem.** `timing` rides inside the free-form `overrides` Hash, so nothing
 inspects it — a host on deprecated timing is never told.
 
-**Options.** (a) Warn once through `config.logger` when `overrides[:timing]` is
-`before`/`after`. (b) Record as an accepted consequence of the free-form
-`overrides` decision.
+**Resolved — option (a), 2026-08-05 (decision #020).** `Wavebird::Deprecation`
+ports `deprecation.ts`: announce once per process, keyed as upstream keys it
+(`stage3Timing:before`), through `config.logger` instead of `console.warn`. The
+check runs on the *merged* overrides inside `Client#merged_overrides`, so a
+timing set once in `config.default_overrides` is caught as readily as a per-call
+one, and both endpoint methods are covered. The value is still sent — only
+wavebird decides what it means.
+
+Rated higher after `docs/upstream/sandbox-placements-example-2026-08-05.txt`
+turned up: the example wavebird's own sandbox site generates carries
+`"timing": "before"`, so a host copy-pasting it would otherwise never learn the
+value is deprecated.
 
 ### F7 — Placement/render descriptors are not validated
 
@@ -329,7 +338,7 @@ core were already at parity. Everything found sat in the Ruby-side ergonomics of
 the fail-silent layer: five methods with no non-raising path (F1) and three
 fallback *values* differing in kind from upstream's (F2, F3, F4).
 
-**Status after 2026-08-05:** F1–F4 fixed under decision #018, F5 under #019, F8
-and F12 fixed as documentation. **Still open: F6** (no deprecation warning for
-legacy `timing` values) and **F7** (`hosted_frame` completeness not validated
-server-side). F9–F11 are noted-not-actioned.
+**Status after 2026-08-05:** F1–F4 fixed under decision #018, F5 under #019, F6
+under #020, F8 and F12 fixed as documentation. **Still open: F7**
+(`hosted_frame` completeness not validated server-side). F9–F11 are
+noted-not-actioned.

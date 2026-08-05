@@ -106,6 +106,7 @@ divergence to fix: it is the same boundary upstream draws.
 |---|---|---|
 | `normalizeWavebirdPlacement` | internal normalization inside value objects | adapt (not public API) |
 | `resolveAdTimingPlan` (deprecated upstream) | not ported | skip — deprecated in origin |
+| `warnSdkDeprecation` (`deprecation.ts`) | `Wavebird::Deprecation.warn_once` — same key format, same once-per-process registry, writing to `config.logger` instead of `console.warn` | port (adapted) — #020; drives the `timing: before\|after` warning |
 | `WavebirdSdkError` / `WavebirdSdkErrorCode` | `Wavebird::Error` hierarchy + API-code exceptions (pending Q1) | adapt |
 | Types: `JobRequest`, `JobResponse`, `DecisionResponse`, `BeaconRequest/Response`, `ConsentFlags`, `GenerationEvent/Request`, `WavebirdPlacement`, frequency/pacing/targeting configs | Ruby `Data` value objects, field names verbatim | port |
 | `public_contracts/wrapper.ts` runtime guards (`isCslWrapper*V1`) | schema checks inside deserializers | adapt |

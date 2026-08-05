@@ -67,9 +67,23 @@ SDK, then for the findings written down, then for the divergences fixed.
   argument; the Script Tag's page-supplied version runs under a different trust
   model).
 
+**Then F6 — the deprecation channel we never ported (decision #020)**
+- `Wavebird::Deprecation` ports `deprecation.ts`: once per process, upstream's
+  key format, upstream's message, `config.logger` instead of `console.warn`.
+  Checked on the *merged* overrides in `Client#merged_overrides`, so a `timing`
+  set once in an initializer warns just like a per-call one, and both endpoint
+  methods are covered.
+- What pushed this up the list: the example wavebird's own sandbox site
+  generates carries `"timing": "before"` — the exact value the SDK deprecates.
+  The hosts most likely to hit it are the ones following wavebird's own docs.
+- Two adaptations: no logger means the key is *not* consumed (upstream skips its
+  registry when `console.warn` is missing, and a host adding a logger later
+  should still hear it), and `Wavebird.reset_configuration!` clears the registry
+  so one example cannot silence another.
+
 **Todo**
-- F6 (deprecation warning for `timing: before|after`) and F7 (`hosted_frame`
-  completeness validation) are scoped in the findings doc, undecided.
+- F7 (`hosted_frame` completeness validation) is scoped in the findings doc,
+  undecided.
 - Merge `parity-fail-silent` once reviewed.
 
 ## 2026-08-04 — Phase 10 close-out: first live sandbox run, and the bug it found

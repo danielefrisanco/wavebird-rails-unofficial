@@ -6,6 +6,7 @@ require "json"
 require "securerandom"
 require "time"
 
+require_relative "deprecation"
 require_relative "errors"
 require_relative "types"
 require_relative "decision_normalizer"
@@ -48,6 +49,11 @@ module Wavebird
     # Input aliases for consent +source+ accepted but never emitted
     # (build prompt §3.7).
     CONSENT_SOURCE_ALIASES = { "publisher" => "publisher_custom", "custom_dialog" => "publisher_custom" }.freeze
+
+    # +overrides.timing+ values upstream marks deprecated in +createV1JobRequest+.
+    # They still work; wavebird recommends +"during"+, which requests the ad while
+    # the model generates and so adds no latency to the turn.
+    DEPRECATED_TIMINGS = %w[before after].freeze
 
     # Upstream polling constants (+getDecisionViaPolling+), all mirrored exactly.
 
@@ -487,8 +493,29 @@ module Wavebird
     def merged_overrides(overrides, publisher)
       merged_publisher = merge_hashes(config.default_publisher, publisher)
       merged = merge_hashes(config.default_overrides, overrides) || {}
+      warn_deprecated_timing(Types.field(merged, :timing))
       merged = merged.merge(publisher: merged_publisher) if merged_publisher
       merged.empty? ? nil : merged
+    end
+
+    # Port of upstream's stage-3 timing deprecation (+createV1JobRequest+). The
+    # value is still sent — only wavebird decides what it means — but a host
+    # asking for the legacy timing hears about the recommended one once per
+    # process. Checked on the *merged* overrides, so a timing set once in
+    # +config.default_overrides+ is caught as readily as a per-call one, and both
+    # endpoint methods are covered.
+    #
+    # This matters more than it looks: wavebird's own sandbox site generates an
+    # example request carrying +"timing": "before"+, so a host that copy-pastes
+    # it would otherwise never learn the value is deprecated.
+    def warn_deprecated_timing(timing)
+      return unless DEPRECATED_TIMINGS.include?(timing.to_s)
+
+      Deprecation.warn_once(
+        "stage3Timing:#{timing}",
+        "Using '#{timing}' timing. wavebird's recommended timing is 'during' for zero-latency ads.",
+        config.logger
+      )
     end
 
     def merge_hashes(base, extra)
