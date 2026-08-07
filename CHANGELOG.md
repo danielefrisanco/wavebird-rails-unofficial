@@ -111,6 +111,12 @@ wavebird's canonical REST v1 API.
   the browser.
 - Source-level leak audit spec asserting no gem code path interpolates
   `secret_key` or `asset_token` into a string outside a small explicit allowlist.
+- The 64 KiB response cap applies to **error envelopes**, not only success
+  bodies, so an oversized 4xx/5xx from a misbehaving origin or proxy is rejected
+  rather than buffered and parsed. Matches upstream, which enforces the cap in
+  the response's `data` handler before any status branching exists; as there, an
+  unreadable response wins over the status classification, so an oversized 429
+  raises `InvalidResponseError` instead of becoming a rate-limit result.
 
 #### Documentation and tooling
 

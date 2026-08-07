@@ -407,9 +407,11 @@ not a docs problem. Raised by Daniele.
   importmap pins nor controller registration — steps 5 and 6 vanish. It already
   works (decision #008) but the docs present the Stimulus path first, so it reads
   as mandatory when it is not. Cheapest available win; do this regardless.
-- [ ] Consider single-file, copy-pasteable examples over the current directory of
+- [ ] **Improve the examples** (raised again by Daniele, 2026-08-07). Move to
+  single-file, copy-pasteable examples instead of the current directory of
   fragments — upstream ships `browser-chat.html`, `node-server.ts`,
-  `express-middleware.ts`, each standalone. Ours only makes sense assembled.
+  `express-middleware.ts`, each standalone and runnable on its own. Ours only
+  make sense assembled, which puts the burden of assembly on the reader.
 - [ ] Optional: promote the scratchpad chat demo into a runnable
   `rake wavebird:demo`, so "see it working" is one command.
 
@@ -421,6 +423,32 @@ one that is *hard* is not.
 
 - [ ] Tag v0.1.0, finalize CHANGELOG, `gem build` artifact ready.
 - [ ] Pre-publish re-check of versioning/changelog pages (per prompt's closing note).
+
+## Future — raised, not scheduled
+
+Both raised by Daniele on 2026-08-07. Neither is a parity gap to be closed on
+sight: each reverses an approved decision, so each needs its own decision entry
+before any code moves.
+
+- [ ] **Rethink the WebSocket transport.** Upstream's decision transport is a
+  per-slot WebSocket (`createDecisionWsTicket` → open → one message → close),
+  with polling as the *fallback*. We ship polling only, plus an ActiveJob +
+  Turbo Stream async mode (#001, #015, #016). Worth revisiting because the
+  upstream shape is scoped to one caller by construction — that property is what
+  #015 had to rebuild by hand after the shared-channel leak. Open questions when
+  we pick it up: does ActionCable earn its place next to Turbo Streams, or does
+  it duplicate it; who owns the socket lifecycle in a Rails request cycle; and
+  does the ticket endpoint exist on the canonical route or only the legacy
+  wrapper (unverified — check before designing).
+- [ ] **Consider a React surface.** Today: hidden `<section>` + Stimulus + the
+  hosted `render.js` (#006, #008, #009). Upstream ships React bindings, but its
+  own `mount` DOM builders are deprecated, so "port what upstream has" is not
+  the brief — the question is what a React host app actually needs from a Rails
+  gem. Note the seam already exists: Path C (`window.wavebird.withTurn(sel,
+  work)`) is framework-agnostic and needs no Stimulus, so a React wrapper would
+  likely sit on that rather than on the engine's Stimulus controller.
+
+Examples are tracked in Phase 10.5, not here.
 
 ---
 

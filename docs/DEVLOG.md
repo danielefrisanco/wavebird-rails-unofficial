@@ -2,6 +2,45 @@
 
 Reverse chronological. Each entry: done / todo / problems found.
 
+## 2026-08-07 — F9(b): the response cap covers error envelopes (branch `f9-response-cap`)
+
+A short evening task, picked as the smallest of the three things left open.
+
+**Done.** Extracted `enforce_size_cap!` from `parsed_body` and called it from
+`raise_for_status` as well, so the 64 KiB cap now covers every response body we
+read rather than only the 2xx path. Decision #022.
+
+**The thing worth remembering.** This looked like hardening — "we cap successes,
+we may as well cap errors" — and reading the upstream source turned it into a
+real parity gap. Upstream's cap is not on a parse path at all: it lives in the
+response's own `data` handler (`wavebird-client.ts:736-744`), accumulating
+`totalBytes` and destroying the request the moment the threshold trips. That is
+*before* any status branching exists, so it necessarily covers 4xx/5xx exactly
+like 200. The asymmetry was ours alone.
+
+Where the code sits in upstream also answered the design question I would
+otherwise have had to bring to Daniele. Since upstream destroys the whole
+request, an oversized 429 never becomes a rate-limit result — the `Retry-After`
+header did arrive, but the request it belonged to is gone. So the cap wins over
+the status classification here too: `Facade#create_job` gets `nil`, not
+`Types::RateLimited`. Preserving the status would have been the more *useful*
+behavior, and that is exactly why it needed to be a conscious call rather than a
+default — an HTTP error we could not finish reading is not one we can report
+faithfully.
+
+**Left alone deliberately.** The other half of F9: Faraday's `options.timeout`
+is a total deadline where Node's is an idle timeout, so a slow-drip response is
+cut off by us and tolerated upstream. Ours is the safer behavior and changing it
+means fighting Faraday's timeout model. Recorded as a transport-layer
+adaptation, not a gap.
+
+421 unit examples, 100% line + branch, RuboCop clean.
+
+**Todo.** F10 stands as adapted (no action). Phase 10.5 — the install generator,
+leading the docs with the no-Stimulus path, and better examples — is the next
+real block of work. Two items parked in the plan under "Future — raised, not
+scheduled": revisiting the WebSocket transport, and a possible React surface.
+
 ## 2026-08-05 — Parity re-review, and closing the fail-silent gaps (branch `parity-fail-silent`)
 
 Daniele asked for a fresh parity review of the whole API against the original

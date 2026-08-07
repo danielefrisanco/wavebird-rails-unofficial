@@ -204,6 +204,36 @@ RSpec.describe Wavebird::Client, "request plumbing" do
 
       expect { client.project_config }.to raise_error(Wavebird::InvalidResponseError, /exceeds/)
     end
+
+    # Upstream caps in the response's data handler, before it can know the
+    # status, so an oversized error envelope is destroyed like any other
+    # oversized body. Ours capped only the success path until #022.
+    it "rejects an oversized error envelope too" do
+      stub_request(:get, config_url)
+        .to_return(status: 500, body: JSON.generate("error" => "server_error", "detail" => "x" * 70_000))
+
+      expect { client.project_config }.to raise_error(Wavebird::InvalidResponseError, /exceeds/)
+    end
+
+    # The cap wins over the status classification, as upstream's does: it
+    # rejects the whole request, so there is no 429 left to read a Retry-After
+    # from. An unreadable response is not a rate limit we can honour.
+    it "reports an oversized 429 as an unreadable response, not a rate limit" do
+      stub_request(:get, config_url)
+        .to_return(status: 429, body: "x" * 70_000, headers: { "retry-after" => "30" })
+
+      expect { client.project_config }
+        .to raise_error(Wavebird::InvalidResponseError) { |e| expect(e.code).to eq("response_too_large") }
+    end
+
+    it "still classifies an error envelope that fits under the cap" do
+      stub_request(:get, config_url)
+        .to_return(status: 429, body: JSON.generate("error" => "rate_limit_exceeded"),
+                   headers: { "retry-after" => "30" })
+
+      expect { client.project_config }
+        .to raise_error(Wavebird::RateLimitedError) { |e| expect(e.retry_after).to eq(30.0) }
+    end
   end
 
   describe "#project_config" do

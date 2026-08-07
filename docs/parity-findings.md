@@ -36,7 +36,7 @@ and all still true.
 | Canonical enums | beacon event, generation event, `job_type`, position/format, consent decision/source | all five identical |
 | Fail-silent core | public methods never throw; failures go to `onError` + logger; an observer that throws is swallowed | same at `Facade` + the polling ladder (`facade.rb`, `client.rb:297`) |
 | Browser payload | endpoint returns the wavebird response shape; renderer resolves `placement.render.frame_url` | same shape on both delivery modes since #017 (`slot_payload.rb:111`) |
-| Response size cap | 64 KiB | same constant (`client.rb:31`) |
+| Response size cap | 64 KiB, enforced mid-stream on every response whatever its status | same constant, enforced on both the success and error-envelope paths since #022 (`client.rb:31`) |
 
 ## 2. Divergences already decided and recorded
 
@@ -278,7 +278,7 @@ this header set, so the caveat is answered: **the doc was stale, not the code.**
 The parity row now records the verification and the fact that the value also
 goes out as `User-Agent`. No behavior change.
 
-### F9 — Transport mechanics differ in two small ways
+### F9 — Transport mechanics differ in two small ways — **(b) fixed 2026-08-07**
 
 **Upstream.** Node's `timeout` option is an *idle* timeout, and the 64 KiB cap
 is enforced mid-stream: the request is destroyed as soon as the threshold is
@@ -294,6 +294,24 @@ parsed here. Both are edge cases.
 
 **Options.** (a) Leave, record as a transport-layer difference. (b) Also cap
 `safe_parse_hash`.
+
+**Resolved (decision #022): (b) done, (a) recorded.** Re-reading the upstream
+source sharpened this from a hardening nicety into a genuine gap. The cap is
+*not* on a parse path upstream — it is in the response's `data` handler
+(`wavebird-client.ts:736-744`), so it trips before any status branching exists
+and therefore covers 4xx/5xx exactly like 200. Ours covered only 2xx. Now
+`enforce_size_cap!` runs on both paths.
+
+That placement also decided the open design question. Because upstream destroys
+the whole request, an oversized 429 never becomes a rate-limit result: the
+`Retry-After` header arrived, but the request it belonged to is gone. We match
+it — `InvalidResponseError(response_too_large)` wins over the status-derived
+error, so `Facade#create_job` returns `nil`, not `Types::RateLimited`. Keeping
+the status classification would have been *more useful* and was rejected on
+parity grounds.
+
+The idle-vs-total timeout half stays as (a): our behavior is the safer one and
+changing it means fighting Faraday's timeout model.
 
 ### F10 — Logging is a warn-only string channel
 
@@ -358,8 +376,10 @@ core were already at parity. Everything found sat in the Ruby-side ergonomics of
 the fail-silent layer: five methods with no non-raising path (F1) and three
 fallback *values* differing in kind from upstream's (F2, F3, F4).
 
-**Status after 2026-08-05: every actionable finding is closed.** F1–F4 under
+**Status after 2026-08-07: every actionable finding is closed.** F1–F4 under
 decision #018, F5 under #019, F6 under #020, F7 under #021 (which reversed the
-fix this document originally proposed — see the finding), F8 and F12 as
-documentation. F9–F11 are noted-not-actioned: two edge-case transport mechanics
-and one immaterial `nil` handling, none of which change observable behavior.
+fix this document originally proposed — see the finding), F9(b) under #022, F8
+and F12 as documentation. What remains is deliberate: F9(a), where our total
+request deadline is the safer reading of Node's idle timeout, and F11, an
+immaterial `nil`. F10 stands as adapted — Rails hosts filter by logger level and
+subscribe to `ActiveSupport::Notifications`, which upstream has no equivalent of.
