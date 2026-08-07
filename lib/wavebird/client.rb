@@ -390,6 +390,7 @@ module Wavebird
       status = response.status
       return if (200..299).cover?(status)
 
+      enforce_size_cap!(response.body)
       envelope = safe_parse_hash(response.body)
       raise error_for(status, path, envelope, response.headers)
     end
@@ -424,13 +425,24 @@ module Wavebird
     def parsed_body(response)
       body = response.body
       return nil if body.nil? || body.empty?
-      if body.bytesize > MAX_JSON_BYTES
-        raise InvalidResponseError.new("Response body exceeds #{MAX_JSON_BYTES} bytes", code: "response_too_large")
-      end
 
+      enforce_size_cap!(body)
       JSON.parse(body)
     rescue JSON::ParserError
       raise InvalidResponseError.new("Response could not be parsed as JSON", code: "parse_error")
+    end
+
+    # Upstream enforces the cap mid-stream, in the response's own +data+ handler
+    # (+wavebird-client.ts:740+), so it trips before the client knows whether it
+    # is holding a success body or an error envelope: an oversized 4xx/5xx is
+    # destroyed exactly like an oversized 200. That is why this guard runs on
+    # both paths, and why it wins over +error_for+ -- upstream rejects the whole
+    # request there, losing the status classification (and a 429's +Retry-After+)
+    # with it, rather than reporting an HTTP error it could not read.
+    def enforce_size_cap!(body)
+      return if body.to_s.bytesize <= MAX_JSON_BYTES
+
+      raise InvalidResponseError.new("Response body exceeds #{MAX_JSON_BYTES} bytes", code: "response_too_large")
     end
 
     def safe_parse_hash(body)
