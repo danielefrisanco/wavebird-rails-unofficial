@@ -147,14 +147,26 @@ end
 ### `Wavebird::Facade` — fail-silent (what `Wavebird.client` returns)
 
 Every method swallows `Wavebird::Error`, reports it via `on_error`/`logger`, and
-returns a "hide the slot and continue" value. Use this in request paths.
+returns a "hide the slot and continue" value. Use this in request paths. The
+whole `Client` surface is mirrored here, because upstream's whole surface is
+fail-silent — a method available only in its raising form would let the ad path
+break your flow.
 
 | Method | Returns | On failure |
 |---|---|---|
 | `create_placement(**)` | `Types::PlacementResponse` | synthetic no-fill response |
-| `create_job(**)` | `Types::AcceptedJob`, `nil` | `nil` |
-| `await_decision(slot_id)` | `Types::Decision` | synthetic no-fill decision |
-| `record_beacon(**)` | `Types::BeaconResult`, `nil` | `nil` |
+| `create_job(**)` | `Types::AcceptedJob`, `Types::RateLimited`, `nil` | `nil` — except a 429, which returns `Types::RateLimited` (a result, not a failure: logged at `warn`, no `on_error`) |
+| `decision(slot_id, **)` | `Types::Decision` | synthetic pending decision |
+| `await_decision(slot_id)` | `Types::Decision` | synthetic pending decision (upstream's `fallbackDecision`) |
+| `record_beacon(**)` | `Types::BeaconResult` | `accepted: false`, `reason_code: "SDK_FAIL_SILENT"` |
+| `report_generation(job_id, event, **)` | `true` | `false` |
+| `record_consent(**)` | `Types::ConsentState`, `nil` | `nil` |
+| `activate_browser(**)` | `Types::BrowserActivation`, `nil` | `nil` |
+| `project_config(**)` | `Types::ProjectConfig`, `nil` | `nil` |
+
+`ArgumentError` is **not** swallowed: an event outside the canonical enum is a
+caller bug, not a wavebird failure (upstream's compiler rejects it before the
+call is made).
 
 ### `Wavebird::Client` — raising (typed errors)
 
@@ -162,8 +174,8 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 
 | Method | Endpoint | Notes |
 |---|---|---|
-| `create_placement(job_type:, wait_ms:, session_id:, slots_requested:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
-| `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting |
+| `create_placement(job_type:, wait_ms:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
+| `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting. This route carries consent as `overrides.gdpr_applies` only — other flags are logged, not sent; use `create_placement` for the full object |
 | `decision(slot_id, wait_ms:)` | `GET /v1/decisions/{slot_id}` | one poll; `wait_ms: 0` for a short poll |
 | `await_decision(slot_id)` | `GET /v1/decisions/{slot_id}` | upstream polling ladder; raises `DecisionTimeoutError` on budget exhaustion |
 | `record_beacon(slot_id:, asset_token:, event:, beacon_id:, occurred_at:, metadata:)` | `POST /v1/beacons` | advanced — the hosted renderer already beacons; don't duplicate |
@@ -198,6 +210,7 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 | `default_slot_hint` | `nil` | e.g. `{ position: "below", max_width: 728, max_height: 90 }` |
 | `default_overrides` | `nil` | e.g. `{ allowed_formats: %w[banner native], timing: "during" }` |
 | `default_publisher` | `nil` | merged into `overrides.publisher` |
+| `default_consent` | `nil` | consent sent by the engine endpoint, which does not accept it from the browser |
 | `on_error` | `nil` | callable; receives every swallowed error |
 | `logger` | `nil` | warnings only; never receives secrets or asset tokens |
 | `async_queue_name` | `:default` | queue for `DecisionPollJob` |
@@ -245,9 +258,12 @@ These are wavebird's own product rules, baked in as behavior rather than advice:
 
 - **No prompts, chat history, user ids, emails or account data are ever sent.**
   The client's public API deliberately has no parameter that invites it. The
-  server endpoint accepts only a whitelisted slot context from the browser; the
-  closest thing to content is `create_job`'s optional `topic:` — a single
-  semantic hint you choose server-side, never the user's text.
+  closest thing to content is the optional `topic:` on `create_placement` /
+  `create_job` — a single coarse hint like `"cloud hosting"`, never the user's
+  text. It is a **server-side** argument: the engine endpoint does not accept a
+  topic from the browser, so page content cannot reach the ad network by
+  accident. To use it, call the client from your own controller, where you know
+  what the turn is about.
 - **The secret key is unreachable from the browser.** It lives only in your
   server-side config, is never rendered into HTML or JSON, and is redacted from
   `Configuration#inspect`. A boot-time guard raises `ConfigurationError` if the
@@ -262,6 +278,44 @@ These are wavebird's own product rules, baked in as behavior rather than advice:
 
 The session id the gem generates is a random anonymous `sess_` token, not a user
 identifier.
+
+### Consent flags are yours to send
+
+The gem sends a `consent` object **only when you supply one** — matching the
+TypeScript SDK, which injects no defaults either (decision #013). If you send
+nothing, wavebird applies its own server-side defaults.
+
+If your app has a CMP, or you simply want to assert the protective values, pass
+them explicitly:
+
+```ruby
+Wavebird.client.create_placement(
+  job_type: "chat",
+  session_id: session_id,
+  consent: { semantic_targeting: false, prompt_shared: false,
+             gdpr_applies: true, consent_source: "publisher_custom" }
+)
+```
+
+Use `consent_source: "publisher_custom"` when the consent came from your own UI.
+`"wavebird_consent"` means the user answered wavebird's own consent dialog — the
+gem never renders one, so claiming it would misstate where the consent came from.
+
+For the **engine endpoint**, set them server-side — it deliberately does not
+accept `consent` (or `overrides`) from the browser, since a page must not be able
+to assert consent on a user's behalf or undo your brand-safety settings:
+
+```ruby
+Wavebird.configure do |c|
+  c.default_consent   = { semantic_targeting: false, consent_source: "publisher_custom" }
+  c.default_overrides = { blocked_categories: %w[gambling] }
+end
+```
+
+One limit worth knowing: the canonical `POST /v1/jobs` route used by **async
+mode** can only carry `gdpr_applies` (upstream folds it into `overrides`). Other
+flags are logged and skipped there; send them through the blocking path, whose
+`/v1/placements` body takes the full object.
 
 ## Development
 

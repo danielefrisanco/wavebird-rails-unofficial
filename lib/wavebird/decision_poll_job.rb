@@ -27,11 +27,13 @@ module Wavebird
     queue_as { Wavebird.configuration.async_queue_name }
 
     # @param slot_id [String] the slot to poll (from the accepted job)
-    # @param stream_name [String] the Turbo Stream the browser subscribed to
-    #   (see {SlotHelper#wavebird_slot})
-    def perform(slot_id, stream_name)
+    # @param stream_name [String] the session-scoped Turbo Stream the browser
+    #   subscribed to (see {SlotPayload.stream_name})
+    # @param position [String] slot position, which the broadcast target's DOM id
+    #   is built from
+    def perform(slot_id, stream_name, position)
       decision = Wavebird.client.await_decision(slot_id)
-      broadcast(stream_name, decision)
+      broadcast(stream_name, position, decision)
     end
 
     private
@@ -41,7 +43,7 @@ module Wavebird
     # the bare +asset_token+ (the server folds it into +frame_url+). The broadcast
     # is guarded so a queue that runs without Turbo loaded degrades to a no-op
     # rather than raising into the host's job backend.
-    def broadcast(stream_name, decision)
+    def broadcast(stream_name, position, decision)
       return unless defined?(Turbo::StreamsChannel)
 
       # Appended *into* the slot <section>, not replacing an element of its own:
@@ -50,16 +52,10 @@ module Wavebird
       # is present (a `replace` against a missing target is a silent no-op).
       Turbo::StreamsChannel.broadcast_append_to(
         stream_name,
-        target: SlotPayload.slot_dom_id(position_from(stream_name)),
+        target: SlotPayload.slot_dom_id(position),
         partial: "wavebird/slot_broadcast",
-        locals: { stream_name: stream_name, payload: SlotPayload.call(decision) }
+        locals: { payload: SlotPayload.call(decision) }
       )
-    end
-
-    # The stream is named after the slot position (see SlotHelper#wavebird_slot),
-    # which is what the slot's DOM id is built from.
-    def position_from(stream_name)
-      stream_name.to_s.delete_prefix("wavebird_slot_")
     end
   end
 end

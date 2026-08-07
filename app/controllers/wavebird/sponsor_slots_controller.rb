@@ -49,14 +49,29 @@ module Wavebird
     # fails silently to +nil+) so the slot still resolves.
     def async_response
       job = Wavebird.client.create_job(**job_args)
+      # A rate limit is the API asking us to back off, not a failure to route
+      # around: falling through to the blocking path would spend the next 429 on
+      # the same slot. Hide it instead and let the next turn try again.
+      return render(json: SlotPayload.no_fill) if job&.rate_limited?
       return blocking_response if job.nil? || job.slot_ids.empty?
 
-      DecisionPollJob.perform_later(job.slot_ids.first, stream_name)
+      DecisionPollJob.perform_later(job.slot_ids.first, stream_name, position)
       render json: { pending: true }
     end
 
+    # Async also needs a session id: the Turbo Stream is scoped to it, and an
+    # unscoped stream would deliver this visitor's decision to every other
+    # visitor. Without one the request degrades to the blocking path, which needs
+    # no stream at all — the slot still fills.
     def async_requested?
-      slot_params[:mode].to_s == "async"
+      return false unless slot_params[:mode].to_s == "async"
+      return true if slot_params[:session_id].present?
+
+      Wavebird.configuration.logger&.warn(
+        "[wavebird] async mode requested without a session_id; falling back to blocking. " \
+        "Pass session_id: to wavebird_slot so the decision stream can be scoped to this visitor."
+      )
+      false
     end
 
     # Async needs Turbo Streams (over ActionCable) and ActiveJob in the host app.
@@ -78,34 +93,48 @@ module Wavebird
       false
     end
 
-    # The Turbo Stream the browser subscribed to (see {SlotHelper#wavebird_slot}).
-    # Defaults to a per-position stream when the client does not send one.
-    def stream_name
-      slot_params[:stream_name].presence || "wavebird_slot_#{slot_params[:position].presence || 'below'}"
+    def position
+      slot_params[:position].presence || "below"
     end
 
-    # Whitelisted, browser-supplied slot context merged over the configured
-    # defaults. The user's raw prompt is deliberately not accepted here (privacy
-    # §4): semantic targeting is opt-in and configured server-side, not driven by
-    # untrusted request params.
+    # The Turbo Stream to broadcast the decision on, derived here rather than
+    # accepted from the request: the browser subscribed to the same name via
+    # {SlotHelper#wavebird_slot}, and taking it from params would let a client
+    # choose whose page its payload lands on.
+    def stream_name
+      SlotPayload.stream_name(position, slot_params[:session_id])
+    end
+
+    # Whitelisted, browser-supplied slot context. The user's raw prompt is
+    # deliberately not accepted (privacy §4): semantic targeting is opt-in and
+    # configured server-side, not driven by untrusted request params.
+    #
+    # +overrides+ and +consent+ are **not** taken from the request either. Both
+    # steer the auction — +overrides+ carries brand safety, bidfloors and
+    # targeting; +consent+ asserts what wavebird may do with the request — and the
+    # browser is not a trusted source for either. A page could otherwise clear
+    # +blocked_categories+ or claim +semantic_targeting: true+ on a user's behalf.
+    # They come from +config.default_overrides+ / +config.default_consent+, set by
+    # the host in an initializer; the client merges the former itself.
     def placement_args
       {
         session_id: slot_params[:session_id],
         job_type: slot_params[:job_type].presence || "chat",
         slot_hint: hash_param(:slot_hint),
-        overrides: hash_param(:overrides),
-        consent: hash_param(:consent)
+        consent: Wavebird.configuration.default_consent
       }.compact
     end
 
-    # +create_job+ takes the same context minus the placement-only +consent+ arg.
+    # +create_job+ takes the same context, consent included: the canonical jobs
+    # route carries it as +overrides.gdpr_applies+ (see {Client#create_job}), so
+    # forwarding it keeps async delivery from quietly losing a flag the blocking
+    # path would have sent.
     def job_args
-      placement_args.except(:consent)
+      placement_args
     end
 
     def slot_params
-      params.permit(:session_id, :job_type, :mode, :stream_name, :position,
-                    slot_hint: {}, overrides: {}, consent: {})
+      params.permit(:session_id, :job_type, :mode, :position, slot_hint: {})
     end
 
     # Permits an arbitrary nested hash param and returns a plain Hash (or nil).

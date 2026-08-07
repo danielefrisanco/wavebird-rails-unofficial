@@ -41,10 +41,11 @@ audit phase at the end.
   `rubygems_mfa_required = "true"` in metadata.
 - [x] Dev tooling: RSpec, WebMock, SimpleCov (min coverage enforced), RuboCop
   (standard style, `.rubocop.yml` committed), `rake` default task = spec + rubocop.
-- [ ] GitHub Actions CI: matrix over supported Ruby × Rails (7.1, 7.2, 8.0) via
-  `appraisal` or gemfiles; runs rspec + rubocop. **Dev is now on Ruby 3.4.10 +
-  Rails 8.1 (decision #007)**; the CI Ruby floor will be pinned when the matrix
-  lands (Phase 8) — the gem still declares `>= 3.2` for consumers on older Rails.
+- [x] GitHub Actions CI: matrix over supported Ruby × Rails via `gemfiles/`;
+  runs rspec + rubocop. **Landed in Phase 10 (decision #014)** — 10 legs
+  (Ruby 3.2/3.3/3.4 × Rails 7.1/7.2/8.0/8.1, minus 8.1 on 3.2/3.3). The earlier
+  Ruby-only matrix was silently broken: nothing capped Rails, so every leg
+  resolved 8.1.3, which does not parse on Ruby 3.3.
 
 **Gate:** `bundle exec rake` green on empty skeleton; CI runs.
 
@@ -132,8 +133,8 @@ Phase 6 with its browser half (Daniele's call). Dev toolchain moved to Ruby
   Frame: the hosted renderer owns the element via `replaceChildren`/`hidden`, so
   Stimulus decorates it; async mode reveals it via Turbo **Streams**), matching
   the integration brief's plain-HTML example semantically.
-- [ ] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
-  Phase 6 (needs the Stimulus/Turbo-Stream browser half to be testable):
+- [x] **Async delivery mode (Hotwire-native, opt-in `mode: :async`)** — moved to
+  Phase 6 and shipped there (6b, decisions #001/#009/#010) (needs the Stimulus/Turbo-Stream browser half to be testable):
   controller calls `#create_job` (non-blocking, zero added chat latency) →
   `Wavebird::DecisionPollJob` (ActiveJob, SolidQueue-compatible) polls
   `GET /v1/decisions/{slot_id}` with `wait_ms` long-poll → on decision,
@@ -159,9 +160,9 @@ end-to-end (Phase 5), so 6a lands the browser glue as a clean, reviewable unit
 and 6b tackles the heavier ActiveJob/Turbo-Stream path on its own commit
 boundary. Neither half gets real (Capybara) tests until Phase 8.
 
-### Phase 6a — Stimulus glue + install docs (this phase)
+### Phase 6a — Stimulus glue + install docs — **done**
 
-- [ ] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
+- [x] `app/javascript/controllers/wavebird_controller.js`: loads `/v1/render.js`
   once (idempotent), degrades silently if it fails to load. render.js itself owns
   the turn: it POSTs to the slot's `data-wavebird-endpoint`, reveals the
   `<section>` on fill (mounts the iframe via `replaceChildren`/`hidden`), keeps it
@@ -177,13 +178,13 @@ boundary. Neither half gets real (Capybara) tests until Phase 8.
     (render.js's default body is only a random uuid). Falls back to running
     `detail.work()` unwrapped if `window.wavebird` is absent, so the chat turn is
     never blocked.
-- [ ] Verify lifecycle semantics against the **actual hosted render.js** (fetched
+- [x] Verify lifecycle semantics against the **actual hosted render.js** (fetched
   live 2026-07-18; exposes `withTurn`, `startTurn`, `clearPlacement`) — behavior
   parity, not code translation. Keep the snapshot in `docs/upstream/` for diffing.
-- [ ] `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
+- [x] `app/javascript/wavebird/index.js`: `registerWavebirdControllers(application)`
   registering the controller under the `wavebird` identifier; ship the JS in the
   gemspec `files` glob (`app/**/*`).
-- [ ] Install docs (`INSTALL.md`) for importmap AND jsbundling setups.
+- [x] Install docs (`INSTALL.md`) for importmap AND jsbundling setups.
 
 **Tests:** covered by Phase 8 system tests; unit-test any pure JS helpers if extracted.
 
@@ -341,26 +342,80 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 
 ## Phase 10 — Final audits (the two verification tracks)
 
-**A. Parity audit vs the TypeScript SDK**
-- [ ] Walk the Phase 0 parity table against final code: every ported method's
+**A. Parity audit vs the TypeScript SDK — done**
+- [x] Walk the Phase 0 parity table against final code: every ported method's
   request fields, defaults, and response handling checked against
-  `public_contracts.ts` and the API reference pages, field-for-field.
-- [ ] Resolve the `reportGeneration()` question (port in v1, or documented as
-  out-of-scope with rationale).
-- [ ] Diff the README quickstart flow against the integration brief's recommended
-  architecture — same endpoints, same consent defaults, same no-fill posture.
-- [ ] Re-check `https://wavebird.ai/api/changelog` for contract drift since Phase 0.
+  `public_contracts.ts` and the API reference pages, field-for-field. Results and
+  the four deliberate divergences are recorded in `docs/parity.md`.
+- [x] Resolve the `reportGeneration()` question — decision #002 approved it for
+  v1 and it shipped as `#report_generation`; the parity table's row still said
+  "awaiting Daniele" and has been corrected.
+- [x] Diff the README quickstart flow against the integration brief's recommended
+  architecture. Same endpoints and same no-fill posture. **Consent defaults
+  differ** — the brief's reference backend hard-codes protective flags, the SDK
+  injects none, and the gem follows the SDK (decision #013).
+- [x] Re-check `https://wavebird.ai/api/changelog` for contract drift since
+  Phase 0 — refetched 2026-08-02, still "2026 Q2", identical to the snapshot.
+  **No drift.**
 
 **B. Industry-standard quality audit**
-- [ ] `rubocop` clean; `bundle exec rake` green; coverage threshold met.
-- [ ] Run `/code-review` on the full diff; fix findings.
+- [x] `rubocop` clean; `bundle exec rake` green; coverage threshold met.
+- [x] CI matrix rebuilt as a real Ruby × Rails grid (decision #014); three legs
+  verified locally — 3.3/7.1, 3.2/8.0, 3.4/8.1, all 350 examples green.
+- [x] Gem hygiene: semver 0.1.0, `rubygems_mfa_required`, MIT, homepage +
+  `source_code_uri` set, minimal runtime deps (faraday + railties), 31 files
+  packaged with **no** test/spec files, `rake build` succeeds.
+- [ ] `gem install pkg/*.gem` smoke test in a fresh `rails new` app — deferred to
+  Phase 11 (needs a full `rails new` + network install).
+- [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
+  this** — it is user-invoked and billed.
 - [ ] Run `/security-review`: key handling, log redaction, no PII pathways,
   no secret in any JSON/HTML output (acceptance §5 has an explicit test).
-- [ ] Gem hygiene checklist: semver, `rubygems_mfa_required`, no test files in the
-  packaged gem (`spec.files` check), `bundle exec rake build` + local
-  `gem install pkg/*.gem` smoke test in a fresh `rails new` app.
-- [ ] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
-  (acceptance §4) — requires user-supplied sandbox credentials.
+  **Daniele must trigger this.**
+- [x] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
+  (acceptance §4). Run 2026-08-04 as a real host app on localhost against the live
+  sandbox — the first time the gem met the **real** hosted `render.js`. It found
+  the worst bug of the build: the browser payload was a flat projection the
+  renderer could not resolve, so no ad had ever rendered outside the test
+  stand-in, silently, in either delivery mode (decision #017).
+- [x] Close the gap that hid it: `render_js_contract_spec.rb` now pins the payload
+  **shape**, not just the entry-point names — it asserts the snapshot source lines
+  that decide whether a response paints anything, pins `frame_url` to the exact
+  `placement.render` path, and (where node is available) runs the snapshot's own
+  `placementFrom`/`renderFrom` against the real `SlotPayload` output, including a
+  case asserting the old flat shape resolves to nothing. Verified by reverting the
+  fix: 3 examples fail.
+
+## Phase 10.5 — Install generator & onboarding (scope decision open)
+
+**Why this exists.** Running the gem as a real host app (2026-08-04) showed the
+install is long: mount the engine, write an initializer, `helper
+Wavebird::SlotHelper`, `include Wavebird::SessionId`, two importmap pins **plus**
+adding the gem's `app/javascript` to the asset load path, register the Stimulus
+controller, then two view helpers and a turn dispatch. Eight steps, and steps
+5–6 depend on the host's JS toolchain — the part the gem cannot test for them.
+The vendor's own path is three steps (`<script>`, a div, `withTurn`). If the
+Rails port is harder to adopt than the thing it wraps, that is a product problem,
+not a docs problem. Raised by Daniele.
+
+- [ ] `rails g wavebird:install` — mounts the engine, writes
+  `config/initializers/wavebird.rb`, adds the importmap pins and asset path, and
+  wires `helper`/`include` into `ApplicationController`. Idempotent; prints what
+  it changed. This is the standard Rails answer (Devise, Turbo, Stimulus).
+- [ ] Lead the docs with the **no-Stimulus path**. Path C
+  (`window.wavebird.withTurn("#wavebird-slot-below", work)`) needs neither
+  importmap pins nor controller registration — steps 5 and 6 vanish. It already
+  works (decision #008) but the docs present the Stimulus path first, so it reads
+  as mandatory when it is not. Cheapest available win; do this regardless.
+- [ ] Consider single-file, copy-pasteable examples over the current directory of
+  fragments — upstream ships `browser-chat.html`, `node-server.ts`,
+  `express-middleware.ts`, each standalone. Ours only makes sense assembled.
+- [ ] Optional: promote the scratchpad chat demo into a runnable
+  `rake wavebird:demo`, so "see it working" is one command.
+
+**Open:** does this land in 0.1.0 (before Phase 11) or straight after? Shipping a
+gem whose install is documented-but-fiddly is defensible for a 0.1.0; shipping
+one that is *hard* is not.
 
 ## Phase 11 — Release prep (not executed without explicit go-ahead)
 

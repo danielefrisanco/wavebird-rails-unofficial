@@ -6,12 +6,27 @@ on:
   pull_request:
 
 jobs:
+  # Ruby × Rails matrix. The gemspec promises Ruby >= 3.2 and railties >= 7.1,
+  # < 9, so both axes are tested rather than assumed — a bare `ruby` matrix
+  # resolves the newest Rails on every Ruby, which is a combination no consumer
+  # on an older Ruby would ever get (and, for Rails 8.1 on Ruby 3.3, one that
+  # does not even parse).
   test:
     runs-on: ubuntu-latest
+    name: rails ${{ matrix.rails }} / ruby ${{ matrix.ruby }}
     strategy:
       fail-fast: false
       matrix:
         ruby: ["3.2", "3.3", "3.4"]
+        rails: ["7.1", "7.2", "8.0", "8.1"]
+        exclude:
+          # Rails 8.1 requires Ruby 3.4 (decision #007): actionview 8.1 fails to
+          # parse on 3.3, and 8.1 declares required_ruby_version >= 3.2.0 only
+          # nominally — 3.4 is the supported floor in practice.
+          - { rails: "8.1", ruby: "3.2" }
+          - { rails: "8.1", ruby: "3.3" }
+    env:
+      BUNDLE_GEMFILE: gemfiles/rails_${{ matrix.rails }}.gemfile
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1

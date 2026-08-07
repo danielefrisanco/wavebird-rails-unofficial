@@ -6,6 +6,7 @@ require "json"
 require "securerandom"
 require "time"
 
+require_relative "deprecation"
 require_relative "errors"
 require_relative "types"
 require_relative "decision_normalizer"
@@ -49,6 +50,11 @@ module Wavebird
     # (build prompt §3.7).
     CONSENT_SOURCE_ALIASES = { "publisher" => "publisher_custom", "custom_dialog" => "publisher_custom" }.freeze
 
+    # +overrides.timing+ values upstream marks deprecated in +createV1JobRequest+.
+    # They still work; wavebird recommends +"during"+, which requests the ad while
+    # the model generates and so adds no latency to the turn.
+    DEPRECATED_TIMINGS = %w[before after].freeze
+
     # Upstream polling constants (+getDecisionViaPolling+), all mirrored exactly.
 
     # Long-poll attempts made before the ladder drops to short polling.
@@ -88,18 +94,23 @@ module Wavebird
     # @param wait_ms [Integer, nil] server-side wait for the first decision;
     #   defaults to +config.long_poll_wait_ms+, clamped to the same 0..5000 range
     # @param session_id [String, nil]
+    # @param locale [String, nil] e.g. +"en-US"+; picks creatives and disclosures
     # @param slots_requested [Integer]
+    # @param topic [String, nil] semantic topic hint, sent as +prompt.topic+, as
+    #   in {#create_job}. A coarse subject ("cloud hosting"), never the user's
+    #   message: there is deliberately no parameter for that (build prompt §4)
     # @param slot_hint [Hash, nil] defaults to +config.default_slot_hint+
     # @param overrides [Hash, nil] merged over +config.default_overrides+
     # @param publisher [Hash, nil] merged over +config.default_publisher+ into
     #   +overrides.publisher+ (parity with upstream job building)
     # @param consent [Hash, nil] per-request consent flags
     # @return [Types::PlacementResponse]
-    def create_placement(job_type:, wait_ms: nil, session_id: nil, slots_requested: 1,
-                         slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
+    def create_placement(job_type:, wait_ms: nil, session_id: nil, locale: nil, slots_requested: 1,
+                         topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       wait = clamp_wait_ms(wait_ms.nil? ? config.long_poll_wait_ms : wait_ms)
-      body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type,
-                     slots_requested: slots_requested, slot_hint: slot_hint || config.default_slot_hint,
+      body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
+                     slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
+                     slot_hint: slot_hint || config.default_slot_hint,
                      overrides: merged_overrides(overrides, publisher), consent: consent)
       response = request(:post, "/v1/placements", body: body, query: { wait_ms: wait },
                                                   timeout_ms: config.timeout_ms + wait)
@@ -114,15 +125,24 @@ module Wavebird
     # @param locale [String, nil]
     # @param slots_requested [Integer]
     # @param topic [String, nil] semantic topic hint, sent as +prompt.topic+
-    # @param slot_hint [Hash, nil]
+    # @param slot_hint [Hash, nil] defaults to +config.default_slot_hint+, as in
+    #   {#create_placement} — the engine endpoint picks between the two by
+    #   delivery mode, so a configured hint must reach the auction either way
     # @param overrides [Hash, nil] merged over +config.default_overrides+
     # @param publisher [Hash, nil] merged over +config.default_publisher+
+    # @param consent [Hash, nil] per-request consent flags. The canonical
+    #   +/v1/jobs+ route carries consent as +overrides.gdpr_applies+ only
+    #   (upstream +createV1JobRequest+ falls back to the legacy wrapper ingress
+    #   for the richer flags, which this canonical-only client does not mirror).
+    #   Any other flag is dropped with a warning — send it to
+    #   {#create_placement}, whose request body accepts the full object.
     # @return [Types::AcceptedJob]
     def create_job(job_type:, session_id: nil, locale: nil, slots_requested: 1,
-                   topic: nil, slot_hint: nil, overrides: nil, publisher: nil)
+                   topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
                      slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
-                     slot_hint: slot_hint, overrides: merged_overrides(overrides, publisher))
+                     slot_hint: slot_hint || config.default_slot_hint,
+                     overrides: job_overrides(overrides, publisher, consent))
       accepted_job(parsed_body(request(:post, "/v1/jobs", body: body)))
     end
 
@@ -441,11 +461,61 @@ module Wavebird
 
     # -- request building ----------------------------------------------------
 
+    # Overrides for the canonical +POST /v1/jobs+ body. Port of upstream
+    # +createV1JobRequest+: the canonical route expresses consent as
+    # +overrides.gdpr_applies+ and nothing else, so that one flag is folded in
+    # and any other is reported rather than silently dropped (upstream reaches
+    # the legacy wrapper ingress for those; this client is canonical-only).
+    def job_overrides(overrides, publisher, consent)
+      merged = merged_overrides(overrides, publisher)
+      return merged if consent.nil?
+
+      warn_unmapped_consent(consent)
+      gdpr_applies = Types.field(consent, :gdpr_applies)
+      return merged if gdpr_applies.nil?
+
+      (merged || {}).merge(gdpr_applies: gdpr_applies)
+    end
+
+    # Names the consent flags the canonical jobs route cannot carry, so a caller
+    # who set them learns they need {#create_placement} instead of discovering
+    # it from an auction that ignored their flags.
+    def warn_unmapped_consent(consent)
+      dropped = consent.keys.map(&:to_s) - ["gdpr_applies"]
+      return if dropped.empty?
+
+      config.logger&.warn(
+        "[wavebird] POST /v1/jobs carries consent as gdpr_applies only; ignoring #{dropped.sort.join(', ')}. " \
+        "Use create_placement (POST /v1/placements) to send the full consent object."
+      )
+    end
+
     def merged_overrides(overrides, publisher)
       merged_publisher = merge_hashes(config.default_publisher, publisher)
       merged = merge_hashes(config.default_overrides, overrides) || {}
+      warn_deprecated_timing(Types.field(merged, :timing))
       merged = merged.merge(publisher: merged_publisher) if merged_publisher
       merged.empty? ? nil : merged
+    end
+
+    # Port of upstream's stage-3 timing deprecation (+createV1JobRequest+). The
+    # value is still sent — only wavebird decides what it means — but a host
+    # asking for the legacy timing hears about the recommended one once per
+    # process. Checked on the *merged* overrides, so a timing set once in
+    # +config.default_overrides+ is caught as readily as a per-call one, and both
+    # endpoint methods are covered.
+    #
+    # This matters more than it looks: wavebird's own sandbox site generates an
+    # example request carrying +"timing": "before"+, so a host that copy-pastes
+    # it would otherwise never learn the value is deprecated.
+    def warn_deprecated_timing(timing)
+      return unless DEPRECATED_TIMINGS.include?(timing.to_s)
+
+      Deprecation.warn_once(
+        "stage3Timing:#{timing}",
+        "Using '#{timing}' timing. wavebird's recommended timing is 'during' for zero-latency ads.",
+        config.logger
+      )
     end
 
     def merge_hashes(base, extra)

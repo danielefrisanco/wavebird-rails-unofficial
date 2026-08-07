@@ -32,6 +32,32 @@ RSpec.describe Wavebird::Client, "jobs and generation" do
       expect(stub).to have_been_requested
     end
 
+    # The engine endpoint picks create_job vs create_placement purely by delivery
+    # mode, and the browser never sends a slot_hint — so without this fallback a
+    # configured hint reached the auction in blocking mode and vanished in async.
+    it "falls back to the configured slot hint, like create_placement" do
+      config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
+      stub = stub_request(:post, jobs_url)
+             .with(body: hash_including("slot_hint" => { "position" => "below", "max_width" => 728,
+                                                         "max_height" => 90 }))
+             .to_return(status: 200, body: JSON.generate(accepted))
+
+      client.create_job(job_type: "chat")
+
+      expect(stub).to have_been_requested
+    end
+
+    it "prefers an explicit slot hint over the configured default" do
+      config.default_slot_hint = { position: "below" }
+      stub = stub_request(:post, jobs_url)
+             .with(body: hash_including("slot_hint" => { "position" => "sidebar" }))
+             .to_return(status: 200, body: JSON.generate(accepted))
+
+      client.create_job(job_type: "chat", slot_hint: { position: "sidebar" })
+
+      expect(stub).to have_been_requested
+    end
+
     it "merges the default publisher into overrides" do
       config.default_publisher = { app_name: "SpecApp" }
       stub = stub_request(:post, jobs_url)
@@ -41,6 +67,77 @@ RSpec.describe Wavebird::Client, "jobs and generation" do
       client.create_job(job_type: "chat")
 
       expect(stub).to have_been_requested
+    end
+
+    # Port of upstream createV1JobRequest: the canonical jobs route expresses
+    # consent as overrides.gdpr_applies and nothing else. Upstream reaches the
+    # legacy wrapper ingress for the richer flags; this canonical-only client
+    # says so out loud instead of dropping them quietly.
+    describe "consent on the canonical jobs route" do
+      it "folds gdpr_applies into overrides" do
+        stub = stub_request(:post, jobs_url)
+               .with(body: hash_including("overrides" => { "gdpr_applies" => true }))
+               .to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat", consent: { gdpr_applies: true })
+
+        expect(stub).to have_been_requested
+      end
+
+      it "reads gdpr_applies from string keys too (controller params arrive that way)" do
+        stub = stub_request(:post, jobs_url)
+               .with(body: hash_including("overrides" => { "gdpr_applies" => false }))
+               .to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat", consent: { "gdpr_applies" => false })
+
+        expect(stub).to have_been_requested
+      end
+
+      it "keeps gdpr_applies alongside other overrides" do
+        config.default_publisher = { app_name: "SpecApp" }
+        stub = stub_request(:post, jobs_url)
+               .with(body: hash_including("overrides" => { "publisher" => { "app_name" => "SpecApp" },
+                                                           "gdpr_applies" => true }))
+               .to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat", consent: { gdpr_applies: true })
+
+        expect(stub).to have_been_requested
+      end
+
+      it "warns about flags the canonical route cannot carry, and omits them" do
+        logger = instance_double(Logger, warn: nil)
+        config.logger = logger
+        stub_request(:post, jobs_url).to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat",
+                          consent: { gdpr_applies: true, semantic_targeting: false, prompt_shared: false })
+
+        expect(logger).to have_received(:warn).with(/ignoring prompt_shared, semantic_targeting/)
+        expect(a_request(:post, jobs_url)
+          .with(body: hash_including("overrides" => { "gdpr_applies" => true }))).to have_been_made
+      end
+
+      it "sends no overrides when consent carries nothing the route accepts" do
+        stub = stub_request(:post, jobs_url)
+               .with(body: { client_id: "wbproj_spec", job_type: "chat", slots_requested: 1 })
+               .to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat", consent: { semantic_targeting: false })
+
+        expect(stub).to have_been_requested
+      end
+
+      it "does not warn when consent carries only gdpr_applies" do
+        logger = instance_double(Logger, warn: nil)
+        config.logger = logger
+        stub_request(:post, jobs_url).to_return(status: 200, body: JSON.generate(accepted))
+
+        client.create_job(job_type: "chat", consent: { gdpr_applies: true })
+
+        expect(logger).not_to have_received(:warn)
+      end
     end
 
     {

@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+# Rails 7.2 leg of the CI matrix. Sets the version the root Gemfile reads, then
+# evaluates it, so dependencies live in exactly one place.
+ENV["RAILS_VERSION"] = "7.2"
+
+eval_gemfile File.expand_path("../Gemfile", __dir__)

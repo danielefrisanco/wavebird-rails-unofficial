@@ -194,6 +194,35 @@ RSpec.describe Wavebird::Types do
       expect(job.slot_ids).to eq(%w[slot_1 slot_2])
       expect(job.status).to eq("accepted")
     end
+
+    it "answers the JobResponse union discriminator" do
+      job = described_class.from_api("job_id" => "job_1", "slot_ids" => ["slot_1"], "status" => "accepted")
+
+      expect(job).not_to be_rate_limited
+    end
+  end
+
+  # The other branch of upstream's JobResponse union: a 429 on job creation is a
+  # documented outcome ({error: "rate_limit_exceeded", retry_after_ms}), not a
+  # failure, so the fail-silent facade returns it rather than nil.
+  describe Wavebird::Types::RateLimited do
+    it "carries the upstream error code and the retry delay in seconds" do
+      limited = described_class.from_retry_after(30.0)
+
+      expect(limited.error).to eq("rate_limit_exceeded")
+      expect(limited.retry_after).to eq(30.0)
+      expect(limited).to be_rate_limited
+    end
+
+    it "tolerates a missing Retry-After" do
+      expect(described_class.from_retry_after(nil).retry_after).to be_nil
+    end
+
+    it "keeps the raw payload available" do
+      limited = described_class.from_api("error" => "rate_limit_exceeded", "retry_after" => 5, "quota" => "jobs")
+
+      expect(limited.raw["quota"]).to eq("jobs")
+    end
   end
 
   describe Wavebird::Types::BeaconResult do

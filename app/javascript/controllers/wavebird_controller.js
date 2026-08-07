@@ -34,11 +34,13 @@ export default class extends Controller {
   static values = {
     sessionId: String,
     position: String,
-    // Set by the view helper when the slot was rendered with `async: true`:
-    // requests async delivery and names the Turbo Stream the decision will be
-    // broadcast on. Absent in the blocking default.
+    // Set by the view helper when the slot was rendered with `async: true`, to
+    // request async delivery. Absent in the blocking default.
+    //
+    // The Turbo Stream name is deliberately not a value here: the server derives
+    // it from position + session id on both ends, so a client cannot pick which
+    // stream the decision is broadcast onto.
     mode: String,
-    streamName: String,
     // Absolute or relative URL of the hosted renderer script. Defaults to the
     // canonical CDN path; the view helper's script tag normally loads it first.
     scriptUrl: { type: String, default: "https://api.wavebird.ai/v1/render.js" },
@@ -83,7 +85,12 @@ export default class extends Controller {
     if (!wavebird) return; // render.js not loaded yet; slot simply stays hidden
 
     if (payload && payload.fill) {
-      wavebird.renderPlacement({ target: this.element, placement: { render: payload } });
+      // Handed over as `decision`, exactly as the renderer's own synchronous turn
+      // does: it resolves `options.decision.placement` and then `.render`. The
+      // payload is already that shape — `{ fill, placement: { render: … } }` —
+      // so passing it as `placement:` would bury `render` a level too deep and
+      // silently paint nothing.
+      wavebird.renderPlacement({ target: this.element, decision: payload });
     } else {
       wavebird.clearPlacement({ target: this.element });
     }
@@ -124,13 +131,11 @@ export default class extends Controller {
 
     // render.js's own default body carries only a random uuid, so the request
     // body is built here whenever the slot has anything to say: the stable
-    // session id, the position hint, and — for an async slot — the delivery mode
-    // and the stream the decision should be broadcast on.
+    // session id, the position hint, and — for an async slot — the delivery mode.
     const body = {};
     if (this.sessionIdValue) body.session_id = this.sessionIdValue;
     if (this.hasPositionValue) body.position = this.positionValue;
     if (this.hasModeValue) body.mode = this.modeValue;
-    if (this.hasStreamNameValue) body.stream_name = this.streamNameValue;
     if (Object.keys(body).length > 0) input.body = body;
 
     return wavebird.withTurn(input, work);

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "wavebird/version"
+require_relative "wavebird/deprecation"
 require_relative "wavebird/errors"
 require_relative "wavebird/boot_check"
 require_relative "wavebird/configuration"
@@ -50,12 +51,15 @@ module Wavebird
       @client ||= Facade.new(config: configuration)
     end
 
-    # Resets the global configuration (used by tests).
+    # Resets the global configuration (used by tests). Also clears the
+    # once-per-process deprecation registry, so a test that expects a first-time
+    # warning is not silenced by an earlier example that already triggered it.
     #
     # @return [void]
     def reset_configuration!
       @configuration = nil
       @client = nil
+      Deprecation.reset!
     end
   end
 end

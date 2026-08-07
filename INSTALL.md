@@ -189,7 +189,10 @@ missing, the endpoint logs a warning and transparently falls back to the
 synchronous path — the slot still fills, so nothing breaks.
 
 To enable it, render the slot with `async: true` (which also subscribes it to its
-Turbo Stream) and post `mode: "async"` from your turn:
+Turbo Stream). **Async mode needs a `session_id:`** — the stream is scoped to it,
+so a decision reaches only the visitor it belongs to rather than everyone viewing
+that slot position. Omit it and the slot logs a warning and renders in the
+blocking default instead: still works, just without the latency saving.
 
 ```erb
 <%= wavebird_render_script_tag %>

@@ -1,6 +1,6 @@
 <%# Broadcast fragment for async delivery mode (decision #001).
 
-  DecisionPollJob broadcast_replace_to's this into the slot's Turbo Stream once a
+  DecisionPollJob appends this into the slot's session-scoped Turbo Stream once a
   decision is ready. It carries ONLY the browser-safe payload (build prompt §5):
   frame_url (which the server built from the asset_token so the token never
   crosses the wire), dimensions, label and sponsor — never the secret key, never
@@ -10,8 +10,11 @@
   watches via a `targetConnected` callback; the controller hands the payload to
   window.wavebird.renderPlacement (fill) or clearPlacement (no-fill). No inline
   <script> — CSP-friendly, and the vendor renderer stays the single source of
-  truth for the iframe + viewability beacons. %>
-<div id="<%= stream_name %>"
-     data-wavebird-target="signal"
+  truth for the iframe + viewability beacons.
+
+  Deliberately carries no id: the element only has to connect as a Stimulus
+  target, and the stream it arrived on is scoped to the session — echoing that
+  name into an attribute would put the session id in the DOM for no purpose. %>
+<div data-wavebird-target="signal"
      data-wavebird-payload="<%= payload.to_json %>"
      hidden></div>

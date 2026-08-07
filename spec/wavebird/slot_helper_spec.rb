@@ -71,38 +71,93 @@ RSpec.describe Wavebird::SlotHelper do
   end
 
   describe "#wavebird_slot in async mode" do
-    it "subscribes the slot to its Turbo Stream when turbo_stream_from is available" do
+    it "subscribes the slot to its session-scoped Turbo Stream when turbo_stream_from is available" do
       # Give the view a turbo_stream_from, mimicking turbo-rails being loaded.
       view.define_singleton_method(:turbo_stream_from) do |stream|
         %(<turbo-cable-stream-source signed-stream-name="#{stream}"></turbo-cable-stream-source>).html_safe
       end
 
-      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+      html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_1", async: true)
 
-      expect(html).to include(%(signed-stream-name="wavebird_slot_below"))
+      expect(html).to include(%(signed-stream-name="wavebird_slot_below_sess_1"))
       expect(html).to include(%(id="wavebird-slot-below")) # the section is still rendered
     end
 
     it "renders just the section (no crash) when turbo_stream_from is unavailable" do
-      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+      html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_1", async: true)
 
       expect(html).to include(%(id="wavebird-slot-below"))
       expect(html).not_to include("turbo-cable-stream-source")
     end
 
     it "tells the Stimulus controller to request async delivery" do
-      # Without these the browser would never ask for async mode and the endpoint
+      # Without this the browser would never ask for async mode and the endpoint
       # would silently serve the blocking default.
-      html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+      html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_1", async: true)
 
       expect(html).to include(%(data-wavebird-mode-value="async"))
-      expect(html).to include(%(data-wavebird-stream-name-value="wavebird_slot_below"))
     end
 
-    it "names the stream after the slot position" do
-      html = view.wavebird_slot(endpoint: "/e", position: "sidebar", async: true)
+    # The stream name is derived identically on both ends from position +
+    # session id; sending it to the browser and back would let a client pick
+    # which stream the server broadcasts onto.
+    it "never sends the stream name to the browser" do
+      html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_1", async: true)
 
-      expect(html).to include(%(data-wavebird-stream-name-value="wavebird_slot_sidebar"))
+      expect(html).not_to include("data-wavebird-stream-name-value")
+    end
+
+    # An unscoped stream is shared by every visitor at that position, so one
+    # visitor's decision — frame_url and all — would be broadcast to all of them.
+    # Without a session id there is nothing to scope to, so the slot degrades to
+    # the blocking default: no stream, nothing to leak, and the page still renders
+    # (raising here would 500 the host's chat page — decision #016).
+    describe "without a session id" do
+      it "renders a working blocking slot instead of raising" do
+        view.define_singleton_method(:turbo_stream_from) { |stream| stream.to_s.html_safe }
+
+        html = nil
+        expect { html = view.wavebird_slot(endpoint: "/e", position: "below", async: true) }
+          .not_to raise_error
+        expect(html).to include(%(id="wavebird-slot-below"))
+      end
+
+      it "emits no stream subscription and no async mode value" do
+        view.define_singleton_method(:turbo_stream_from) { |stream| stream.to_s.html_safe }
+
+        html = view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+        expect(html).not_to include("wavebird_slot_below")
+        expect(html).not_to include("data-wavebird-mode-value")
+      end
+
+      it "warns so the host learns why async did not engage" do
+        logger = instance_double(Logger, warn: nil)
+        Wavebird.configure { |c| c.logger = logger }
+
+        view.wavebird_slot(endpoint: "/e", position: "below", async: true)
+
+        expect(logger).to have_received(:warn).with(/async mode needs a session_id/)
+      end
+
+      it "treats a blank session id the same as a missing one" do
+        html = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "  ", async: true)
+
+        expect(html).not_to include("data-wavebird-mode-value")
+      end
+    end
+
+    it "scopes two visitors at the same position to different streams" do
+      view.define_singleton_method(:turbo_stream_from) do |stream|
+        %(<turbo-cable-stream-source signed-stream-name="#{stream}"></turbo-cable-stream-source>).html_safe
+      end
+
+      first = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_a", async: true)
+      second = view.wavebird_slot(endpoint: "/e", position: "below", session_id: "sess_b", async: true)
+
+      expect(first).to include("wavebird_slot_below_sess_a")
+      expect(second).to include("wavebird_slot_below_sess_b")
+      expect(first).not_to include("sess_b")
     end
 
     it "omits the async values entirely in the blocking default" do
