@@ -1,5 +1,72 @@
 # TODO
 
+## `bundle exec rake` exited 1, and had for a while — **fixed 2026-08-07**
+
+Kept as a record: the fix is a two-line config change, but what it was hiding is
+worth remembering.
+
+**Symptom.** The default gate failed on 7 RuboCop offenses, all of them in
+`tmp/chatdemo/` — the scratch host app from the 2026-08-04 live sandbox run.
+That directory is gitignored (`.gitignore:15`), so these are offenses in
+untracked scratch code that no one ships.
+
+**Why it matters more than 7 style offenses.** `default` is
+`%i[spec spec:system rubocop yard_coverage]`, so RuboCop failing means
+**`yard_coverage` never runs**. The gate has therefore not been checking YARD
+coverage at all — it aborts one task earlier. Gem code itself is clean
+(`bundle exec rubocop lib/ spec/` → 49 files, no offenses) and YARD is at
+100.00% when run by hand, so nothing is actually wrong with the gem; the gate
+just stopped being a signal. A permanently-red gate is worse than no gate,
+because it trains you to read `rake` output for the parts you trust.
+
+**Root cause — not the demo code.** RuboCop's own default `AllCops: Exclude` is:
+
+```yaml
+- 'node_modules/**/*'
+- 'tmp/**/*'
+- 'vendor/**/*'
+- '.git/**/*'
+```
+
+`.rubocop.yml:8` declares its own `AllCops: Exclude` (`upstream`, `vendor`,
+`gemfiles`), and **`Exclude` is replaced, not merged**. Declaring it dropped all
+four defaults. `vendor/**/*` survived only because it happens to be re-listed by
+hand; `tmp/**/*` was not, so the scratch app became lintable. `node_modules` and
+`.git` are silently un-excluded too — not biting today, but they would in any
+checkout that has them.
+
+**Fix applied.** Restore the defaults rather than re-listing them, so this cannot
+drift again:
+
+```yaml
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  Exclude:
+    - "upstream/**/*"
+    - "gemfiles/**/*"
+```
+
+`vendor/**/*` came out of the hand-written list — it is a default. Cleaning up
+`tmp/chatdemo/` instead would have fixed the symptom and left the merge bug in
+place for the next untracked directory.
+
+`inherit_mode` is documented for `inherit_from`/`inherit_gem`, so whether it also
+merges against RuboCop's built-in `default.yml` was verified rather than assumed:
+`rubocop --list-target-files` went from 64 files to 60, with `tmp/`, `vendor/`,
+`upstream/` and `gemfiles/` all at zero. The fallback, had it not held, was to
+re-list the four defaults by hand.
+
+**Verified.** `bundle exec rake` exits 0 and prints `100.00% documented` — the
+first time the gate has reached that task. 421 unit examples at 100% line +
+branch, 18 system, 60 files inspected with no offenses.
+
+**Watch for.** CI has never run (no remote yet), and the workflow runs
+`bundle exec rake`. Whenever the repo is pushed, this failure is what the first
+CI run reports, on all 10 matrix legs, unless it is fixed first.
+
 ## data_redactor as an optional integration
 
 `data_redactor` (https://github.com/danielefrisanco/data_redactor) is a good

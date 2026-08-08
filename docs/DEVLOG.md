@@ -36,6 +36,28 @@ adaptation, not a gap.
 
 421 unit examples, 100% line + branch, RuboCop clean.
 
+**Also fixed: the default gate had been red, and skipping a check because of it.**
+`bundle exec rake` exited 1 on 7 RuboCop offenses in `tmp/chatdemo/`, the
+gitignored scratch app from the 2026-08-04 sandbox run. The offenses were
+cosmetic and in code nobody ships, but `default` is
+`%i[spec spec:system rubocop yard_coverage]` — so RuboCop failing meant
+`yard_coverage` **never ran**. YARD was in fact at 100%, but only because it was
+being checked by hand; the gate itself had stopped verifying it, and nobody
+noticed because the failure it did report looked familiar and harmless.
+
+The cause was not the demo code. RuboCop's own `AllCops: Exclude` default is
+`node_modules`, `tmp`, `vendor`, `.git`, and **`Exclude` is replaced, not merged,
+on inherit** — so declaring our own list dropped all four. `vendor/**/*` survived
+only by being re-listed by hand; `tmp/**/*` was not. Fixed with
+`inherit_mode: merge: [Exclude]`, which was verified rather than assumed (the
+option is documented for `inherit_from`/`inherit_gem`, not obviously for the
+built-in defaults): target files 64 → 60, `tmp/` at zero. `rake` now exits 0 and
+reaches `100.00% documented` for the first time.
+
+Worth keeping in mind generally: a permanently-red gate is worse than no gate,
+because the failure everyone learns to ignore is standing in front of the checks
+that come after it.
+
 **Todo.** F10 stands as adapted (no action). Phase 10.5 — the install generator,
 leading the docs with the no-Stimulus path, and better examples — is the next
 real block of work. Two items parked in the plan under "Future — raised, not

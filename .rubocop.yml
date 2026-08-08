@@ -2,12 +2,20 @@ plugins:
   - rubocop-rake
   - rubocop-rspec
 
+# AllCops/Exclude is replaced, not merged, on inherit -- declaring it here once
+# dropped RuboCop's own defaults (node_modules, tmp, vendor, .git), which is how
+# the gitignored tmp/chatdemo scratch app started failing the default rake task
+# and stopping it before yard_coverage ever ran. Merging keeps those defaults, so
+# the list below only has to name what is specific to this repo.
+inherit_mode:
+  merge:
+    - Exclude
+
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
   Exclude:
     - "upstream/**/*"
-    - "vendor/**/*"
     - "gemfiles/**/*"
 
 Naming/FileName:
