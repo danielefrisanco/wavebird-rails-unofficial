@@ -375,8 +375,9 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   token boundary came back clean; one finding, below. Note the command needs a
   `git` base to diff against and there is still no remote — it was pointed at the
   last-reviewed commit via a temporary local ref.
-- [ ] **Fix: `click_url` crosses to the browser with no scheme allowlist**
-  (`slot_payload.rb:150`, from the 2026-08-11 security review). `passthrough_render`
+- [x] **`click_url` crosses to the browser with no scheme allowlist** —
+  **resolved 2026-08-11 as decision #023: match upstream, record the risk.**
+  (`slot_payload.rb:150`, from the security review.) `passthrough_render`
   forwards the API's `render.click_url` unchanged. The hosted renderer assigns it
   straight to `link.href` on an anchor styled `position:absolute;inset:0;z-index:2`
   — full-bleed over the creative, and in the **host page's** DOM, not inside the
@@ -390,17 +391,22 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   was right for the render block generally, but `click_url` is the one member of it
   that becomes *executable* in the host page.
 
-  **Verify before fixing, per WAY_OF_WORK rule 1.** A direct Script Tag install
-  hands the identical `click_url` to the identical renderer, so wavebird may
-  already validate the scheme server-side — in which case this is defence in depth
-  rather than an open hole. Ask the sandbox: submit a placement and see whether any
-  non-http(s) scheme can come back in `render.click_url`. That answer decides
-  whether this is a fix or a hardening note.
+  **What the verification found.** Upstream never validates the scheme anywhere:
+  `placement.ts:63`, `:81`, `:113` and `wavebird-client.ts:562` do a
+  `typeof === "string"` check and nothing else, and both renderers consume the
+  result raw (`ad-renderer.ts:481-489` → `window.open(url)` /
+  `window.location.assign(url)`; hosted `render.js` → `link.href=r.click_url`).
+  So the gem is not weaker than a direct Script Tag install — it is identical to
+  one. The remaining question, whether wavebird's *API* validates server-side,
+  cannot be answered from the publisher side: we cannot submit a creative, so
+  unlike #019 there is no sandbox call that settles it.
 
-  **Fix if unvalidated:** allowlist `http`/`https` where the payload is built,
-  reusing `present_string`; drop the field otherwise. A non-clickable ad is the
-  pre-#021 behaviour and strictly better than executing the URL. Add a spec with a
-  `javascript:` scheme, and record the decision either way.
+  **Decided: match upstream, record the risk (#023).** An `http`/`https` allowlist
+  would make the gem stricter than the renderer it feeds — the trap #021 named —
+  and a legitimate creative on an unusual scheme would silently lose its
+  click-through. The risk is upstream's to hold, and diverging would assert a
+  judgement about wavebird's server-side validation we have no evidence for.
+  Revisit if wavebird ever documents the guarantee, or documents its absence.
 - [ ] **Docs only, from the same review:** `SessionId` documents that hosts may
   pass their own id instead of `wavebird_session_id` (`session_id.rb:19-20`). The
   gem's own id is `"sess_#{SecureRandom.uuid}"`, so the async stream scope of #015

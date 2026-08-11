@@ -99,6 +99,13 @@ divergence to fix: it is the same boundary upstream draws.
 - Client remembers `asset_token → slot_id` mapping to backfill beacon slot_ids.
   Port only if we keep beacon ergonomics identical (low priority — our beacons
   are an escape hatch).
+- `click_url` is **never scheme-validated** anywhere upstream — `placement.ts:63`,
+  `:81`, `:113` and `wavebird-client.ts:562` all do a `typeof === "string"` check
+  and nothing more, and both renderers consume the result raw (`ad-renderer.ts:481`
+  `window.open(url)` / `window.location.assign(url)`; hosted `render.js`
+  `link.href=r.click_url`). We match: `SlotPayload#passthrough_render` forwards it
+  as the API sent it. Accepted risk, recorded in decision #023 — the guarantee
+  lives in wavebird's API, and we cannot verify it from the publisher side.
 
 ## Exported helpers & types
 
