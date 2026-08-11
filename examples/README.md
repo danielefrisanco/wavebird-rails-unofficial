@@ -1,40 +1,49 @@
 # Examples
 
-Two, covering the two ways to wire a turn. Start with the first.
+Two runnable single-file apps, one per integration path, plus the file-by-file
+layout for a real host app. Both runnable ones work **without a wavebird key** —
+the client is fail-silent, so an unconfigured key gives a no-fill: the slot stays
+hidden and the chat still works. Each page has a status panel saying which
+happened, so an empty slot is never ambiguous.
 
-## [`single_file_chat.rb`](single_file_chat.rb) — run it
+For real sandbox placements, prefix either command with
+`WAVEBIRD_SECRET_KEY=sk_test_... WAVEBIRD_CLIENT_ID=wbproj_...`.
 
-A complete integration in one file: engine mounted, initializer, helper opt-in,
-slot, and turn wiring. No `rails new`, no database, no build step, no importmap.
+## [`chat_plain.rb`](chat_plain.rb) — without Hotwire
 
 ```sh
-bundle exec ruby examples/single_file_chat.rb   # from a clone of this repo
+bundle exec ruby examples/chat_plain.rb
 open http://localhost:3000
 ```
 
-It runs **without a wavebird key** — the client is fail-silent, so an
-unconfigured key yields a no-fill: the slot stays hidden and the chat still
-works. Running it unconfigured is the fastest way to see that the ad path cannot
-break your app. For real sandbox placements:
+The path [INSTALL.md](../INSTALL.md) leads with and most apps should use.
+`window.wavebird.withTurn(...)` called directly: no importmap, no Stimulus, no
+asset pipeline, no build step.
+
+## [`chat_hotwire.rb`](chat_hotwire.rb) — with Hotwire
 
 ```sh
-WAVEBIRD_SECRET_KEY=sk_test_... WAVEBIRD_CLIENT_ID=wbproj_... \
-  bundle exec ruby examples/single_file_chat.rb
+bundle exec ruby examples/chat_hotwire.rb
+open http://localhost:3000
 ```
 
-This one uses the **plain-JavaScript path** — `window.wavebird.withTurn(...)`
-called directly, which is what [INSTALL.md](../INSTALL.md) leads with and what
-most apps should use.
+The same integration through Stimulus and Turbo: the turn is dispatched as a
+`wavebird:turn` DOM event, and the placement resolves in a background job,
+revealed over a **session-scoped** Turbo Stream instead of blocking the answer.
+
+Two things a real app takes from its own toolchain are inlined so the file stays
+runnable — Stimulus comes from a CDN import map rather than importmap-rails, and
+the gem's controller is served from its own `app/javascript`. In your app you
+would pin both; see [INSTALL.md](../INSTALL.md#the-stimulus-path).
+
+Run both side by side (`PORT=3001` on one) to see what Hotwire adds and what it
+costs.
 
 ## [`chat_with_sponsored_slot/`](chat_with_sponsored_slot/) — where the files go
 
-The same integration split across the files a real app puts them in — an
-initializer, routes, `ApplicationController`, a controller, a view. Not runnable
-on its own; copy the pieces into a `rails new` app.
+Not runnable. The same integration split across the files a real app puts them
+in — initializer, routes, `ApplicationController`, controller, view. Use it for
+the one thing a single file cannot show: where each piece belongs in a
+conventional Rails layout.
 
-Use it for two things the single-file version cannot show: **where each piece
-belongs** in a conventional Rails layout, and the **Stimulus path** — dispatching
-a `wavebird:turn` DOM event instead of calling the global. That path costs two
-importmap pins, an asset load path entry and a controller registration, and buys
-convenience rather than capability. See
-[INSTALL.md](../INSTALL.md#the-stimulus-path).
+`rails generate wavebird:install` writes most of these for you.

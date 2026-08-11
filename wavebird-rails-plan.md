@@ -27,8 +27,11 @@ audit phase at the end.
   | `public_contracts.ts` types | `Wavebird` value objects | port field-for-field |
   | `WavebirdAd` React / `mountWavebirdAd` | slot `<section>` + Stimulus + hosted renderer (decision #006) | intentionally not ported |
   | `ConsentDialog` | `#record_consent` API only | intentionally not ported (v1) |
-- [ ] Re-check `https://wavebird.ai/api/changelog` + `/api/reference/versioning`
-  (prompt data was pulled 2026-07-18 — same day, but confirm).
+- [x] Re-check `https://wavebird.ai/api/changelog` — refetched 2026-08-02, no
+  drift. **The versioning page needs no re-check: Daniele's decision (2026-08-11)
+  is that the gem ships the same version as the upstream SDK it ports (0.1.5), so
+  there is no independent versioning policy to verify.** Stop listing this as
+  open work.
 
 **Gate:** parity table complete; every skipped TS feature has a written rationale.
 
@@ -365,8 +368,26 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
 - [x] Gem hygiene: semver 0.1.0, `rubygems_mfa_required`, MIT, homepage +
   `source_code_uri` set, minimal runtime deps (faraday + railties), 31 files
   packaged with **no** test/spec files, `rake build` succeeds.
-- [ ] `gem install pkg/*.gem` smoke test in a fresh `rails new` app — deferred to
-  Phase 11 (needs a full `rails new` + network install).
+- [x] Fresh `rails new` smoke test — **done 2026-08-11, via `path:`.** Stock Rails
+  8.1 app on Ruby 3.4.10, gem added by path, `rails g wavebird:install` run twice,
+  server booted, `POST /wavebird/sponsor_slot` answered `{"fill":false}` with **no
+  key configured** — the engine mounted at a route that serves, the facade
+  swallowing the credential error, a clean no-fill rather than a 500. The whole
+  promise, proven outside the test harness for the first time.
+
+  It found a real bug on the first run: the generator's printed snippet omitted
+  `mode`, and the contract spec meant to prevent exactly that drift did not list
+  the generator among the files it checked. Fixed in `0d28b7a`.
+
+  Also worth noting for anyone repeating it: run it under the right Ruby. Outside
+  the repo, rbenv falls back to the global version — 3.1.4 here — and the gemspec
+  correctly refuses (`requires Ruby version >= 3.2`). `rails new` then writes
+  *its* Ruby into the app, so check `ruby -v` after `cd`, not only before.
+- [ ] `gem install pkg/*.gem` — **still open, and distinct from the above.** The
+  smoke test used `path:`, which reads the working tree, so `spec.files` was never
+  on trial. Packaging is what decides whether `initializer.rb.tt` reaches a real
+  user; if it does not, the generator crashes on a fresh install. Do this before
+  publishing.
 - [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
   this** — it is user-invoked and billed.
 - [x] Run `/security-review`: key handling, log redaction, no PII pathways,
@@ -475,9 +496,14 @@ not a docs problem. Raised by Daniele.
   degraded one — the slot already exposes its session id and position as data
   attributes. Pinned by a contract spec so an upstream change cannot silently
   downgrade it back to a random session per turn.
-- [x] **Improve the examples** — **done 2026-08-11.** `examples/single_file_chat.rb`
-  is a complete integration in one file, run with
-  `bundle exec ruby examples/single_file_chat.rb`: engine, initializer, helper
+- [x] **Improve the examples** — **done 2026-08-11, revised the same day.** Two
+  runnable single-file apps, one per integration path, after Daniele pointed out
+  the first cut was both ugly and missing the Hotwire half: `chat_plain.rb`
+  (no Hotwire) and `chat_hotwire.rb` (Stimulus + async Turbo Stream). Both are
+  styled after upstream's own `browser-chat.html` — the bare unstyled page read
+  as broken — and both carry a status panel saying whether an empty slot is a
+  no-fill or a failure, since those look identical otherwise (the #017 trap).
+  Each is a complete integration in one file: engine, initializer, helper
   opt-in, slot and turn wiring, no `rails new` and no build step. It uses the
   plain-JavaScript path, matching what the docs now lead with. **Verified running**
   — `GET /` 200 with the slot section and its data attributes, `POST
@@ -495,8 +521,8 @@ not a docs problem. Raised by Daniele.
   this gem; and the Rack handler namespace moved between rack 2, rack 3 and the
   extracted `rackup` gem, so it uses `Puma::Server` directly.
 - [x] Optional: a runnable demo so "see it working" is one command —
-  **superseded 2026-08-11.** `examples/single_file_chat.rb` already is one
-  command (`bundle exec ruby examples/single_file_chat.rb`) and lives in the
+  **superseded 2026-08-11.** `examples/chat_plain.rb` already is one
+  command (`bundle exec ruby examples/chat_plain.rb`) and lives in the
   repo, where a rake task wrapping a scratchpad app would not. Not adding a task
   that only re-spells a command the example already documents.
 
@@ -506,8 +532,13 @@ one that is *hard* is not.
 
 ## Phase 11 — Release prep (not executed without explicit go-ahead)
 
-- [ ] Tag v0.1.0, finalize CHANGELOG, `gem build` artifact ready.
-- [ ] Pre-publish re-check of versioning/changelog pages (per prompt's closing note).
+- [ ] Tag the release, finalize CHANGELOG, `gem build` artifact ready.
+  **Version tracks the upstream SDK** — Daniele's decision, 2026-08-11: the gem
+  ships the version of the SDK it ports, currently **0.1.5**, not an independent
+  0.1.0. `lib/wavebird/version.rb` still says 0.1.0 and needs updating as part of
+  this step.
+- [ ] Pre-publish re-check of the changelog page for contract drift. (The
+  versioning page is moot — see above; we do not set our own policy.)
 
 ## Future — raised, not scheduled
 

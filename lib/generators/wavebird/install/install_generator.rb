@@ -132,7 +132,8 @@ module Wavebird
           Add your keys to config/initializers/wavebird.rb and you are done. Until
           then the client fails silently: the slot stays hidden and your app works.
 
-          A runnable end-to-end example: examples/single_file_chat.rb in the gem.
+          Runnable end-to-end examples in the gem: examples/chat_plain.rb (no
+          Hotwire) and examples/chat_hotwire.rb (Stimulus + async Turbo Stream).
         TEXT
       end
     end

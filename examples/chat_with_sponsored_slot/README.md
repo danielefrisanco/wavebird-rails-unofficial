@@ -4,7 +4,8 @@ The Rails equivalent of the Next.js example in wavebird's integration brief,
 split across the files a real app puts them in.
 
 **If you just want to see it work, use
-[`../single_file_chat.rb`](../single_file_chat.rb) instead** — one file, one
+[`../chat_plain.rb`](../chat_plain.rb) or [`../chat_hotwire.rb`](../chat_hotwire.rb)
+instead** — one file, one
 command, no assembly. This version exists for the two things that one cannot
 show: where each piece belongs in a conventional layout, and the **Stimulus**
 turn path (a `wavebird:turn` DOM event) rather than calling
