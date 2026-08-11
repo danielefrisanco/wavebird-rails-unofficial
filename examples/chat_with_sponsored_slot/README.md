@@ -1,8 +1,17 @@
-# Example: chat with a sponsored slot
+# Example: chat with a sponsored slot (Stimulus path, file-by-file)
 
-A minimal end-to-end integration — the Rails equivalent of the Next.js example
-in wavebird's integration brief. Four files, mirroring where they go in a host
-app:
+The Rails equivalent of the Next.js example in wavebird's integration brief,
+split across the files a real app puts them in.
+
+**If you just want to see it work, use
+[`../single_file_chat.rb`](../single_file_chat.rb) instead** — one file, one
+command, no assembly. This version exists for the two things that one cannot
+show: where each piece belongs in a conventional layout, and the **Stimulus**
+turn path (a `wavebird:turn` DOM event) rather than calling
+`window.wavebird.withTurn(...)` directly. Stimulus is the optional path; see
+[INSTALL.md](../../INSTALL.md#the-stimulus-path).
+
+Five files, mirroring where they go in a host app:
 
 ```
 config/initializers/wavebird.rb      credentials + defaults
@@ -13,7 +22,10 @@ app/views/chats/show.html.erb        the slot + the turn wiring
 ```
 
 Copy them into a fresh `rails new` app, add your keys, and register the Stimulus
-controller as described in [INSTALL.md](../../INSTALL.md).
+controller as described in [INSTALL.md](../../INSTALL.md#the-stimulus-path) —
+that registration is what makes the `wavebird:turn` event in the view work. Skip
+it and nothing happens on send, because this example uses the event path rather
+than the global.
 
 ## What happens on a send
 

@@ -459,11 +459,25 @@ not a docs problem. Raised by Daniele.
   degraded one — the slot already exposes its session id and position as data
   attributes. Pinned by a contract spec so an upstream change cannot silently
   downgrade it back to a random session per turn.
-- [ ] **Improve the examples** (raised again by Daniele, 2026-08-07). Move to
-  single-file, copy-pasteable examples instead of the current directory of
-  fragments — upstream ships `browser-chat.html`, `node-server.ts`,
-  `express-middleware.ts`, each standalone and runnable on its own. Ours only
-  make sense assembled, which puts the burden of assembly on the reader.
+- [x] **Improve the examples** — **done 2026-08-11.** `examples/single_file_chat.rb`
+  is a complete integration in one file, run with
+  `bundle exec ruby examples/single_file_chat.rb`: engine, initializer, helper
+  opt-in, slot and turn wiring, no `rails new` and no build step. It uses the
+  plain-JavaScript path, matching what the docs now lead with. **Verified running**
+  — `GET /` 200 with the slot section and its data attributes, `POST
+  /wavebird/sponsor_slot` → `{"fill":false}` with no key (the documented
+  fail-silent no-fill, and the `on_error` hook reporting the missing `client_id`),
+  `POST /messages` 200, no secret or token anywhere in the page.
+
+  `chat_with_sponsored_slot/` is kept rather than deleted, repositioned as the
+  file-placement *and* Stimulus counterpart — the two things a single file cannot
+  demonstrate. `examples/README.md` indexes both and says which to start with.
+
+  Two things worth remembering from building it: `bundler/inline` was abandoned
+  because bundler 2.5.3 conflicts with the default `timeout` gem, which would have
+  made the example fail on a clean machine for reasons having nothing to do with
+  this gem; and the Rack handler namespace moved between rack 2, rack 3 and the
+  extracted `rackup` gem, so it uses `Puma::Server` directly.
 - [ ] Optional: promote the scratchpad chat demo into a runnable
   `rake wavebird:demo`, so "see it working" is one command.
 
