@@ -16,8 +16,20 @@ module Wavebird
   #
   #   <%= wavebird_slot(session_id: wavebird_session_id, endpoint: wavebird.sponsor_slot_path) %>
   #
-  # Apps that already have their own anonymous session id can skip the concern
-  # and pass that value instead.
+  # Apps that already have their own anonymous session id can skip the concern and
+  # pass that value instead, provided it is **unguessable and per-browser** — a
+  # random token, not a user id, email hash, or anything sequential.
+  #
+  # That is a security requirement, not a style preference. In async delivery the
+  # Turbo Stream carrying a decision is named from the position *and* this id
+  # ({SlotPayload.stream_name}), and the endpoint derives the broadcast target
+  # from the id the request supplies. A guessable id lets one visitor address
+  # another visitor's stream — pushing a placement into their page and firing
+  # their beacons from an unrelated browser, which is exactly the cross-session
+  # leak decision #015 closed. The scoping holds because {#wavebird_session_id} is
+  # a +SecureRandom.uuid+; a substitute inherits that duty.
+  #
+  # Blocking delivery has no stream at all, so nothing is shared there either way.
   module SessionId
     extend ActiveSupport::Concern
 

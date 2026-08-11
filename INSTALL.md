@@ -247,6 +247,13 @@ so a decision reaches only the visitor it belongs to rather than everyone viewin
 that slot position. Omit it and the slot logs a warning and renders in the
 blocking default instead: still works, just without the latency saving.
 
+That id must also be **unguessable and per-browser**. The endpoint derives the
+broadcast target from whatever the request supplies, so a sequential or
+user-derived id would let one visitor address another's stream — putting a
+placement in their page and firing their beacons from an unrelated browser.
+`wavebird_session_id` is a `SecureRandom.uuid` for exactly this reason; if you
+pass your own, it inherits the requirement.
+
 ```erb
 <%= wavebird_render_script_tag %>
 <%= wavebird_slot endpoint: wavebird.sponsor_slot_path,

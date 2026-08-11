@@ -407,15 +407,17 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   click-through. The risk is upstream's to hold, and diverging would assert a
   judgement about wavebird's server-side validation we have no evidence for.
   Revisit if wavebird ever documents the guarantee, or documents its absence.
-- [ ] **Docs only, from the same review:** `SessionId` documents that hosts may
+- [x] **Docs only, from the same review — done 2026-08-11.** Stated in four
+  places: the `SessionId` YARD docs, the README's integration table and async
+  section, and INSTALL's async section. `SessionId` documented that hosts may
   pass their own id instead of `wavebird_session_id` (`session_id.rb:19-20`). The
   gem's own id is `"sess_#{SecureRandom.uuid}"`, so the async stream scope of #015
   holds — the endpoint takes `session_id` from the request and derives the
   broadcast target from it, which is only safe because that value is unguessable.
   A host substituting a sequential or user-derived id silently reopens the
-  cross-session injection #015 closed. Not a vulnerability today; the docs should
-  say the substitute must be unguessable and per-browser, rather than leaving it
-  as an unqualified "pass that value instead".
+  cross-session injection #015 closed. Not a vulnerability today; the docs now say
+  the substitute must be unguessable and per-browser, rather than leaving it as an
+  unqualified "pass that value instead".
 - [x] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
   (acceptance §4). Run 2026-08-04 as a real host app on localhost against the live
   sandbox — the first time the gem met the **real** hosted `render.js`. It found

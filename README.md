@@ -138,6 +138,15 @@ turn. It needs ActiveJob and Turbo Streams in your app, and **falls back to the
 blocking path automatically** if either is missing. See
 [INSTALL.md](INSTALL.md#async-delivery-mode-optional).
 
+**If you substitute your own `session_id`, it must be unguessable.** The stream a
+decision arrives on is named from the position *and* the session id, and the
+endpoint derives the broadcast target from whatever the request supplies. A
+sequential or user-derived id would let one visitor address another's stream —
+putting a placement in their page and firing their beacons from an unrelated
+browser. `wavebird_session_id` is a `SecureRandom.uuid` precisely for this; a
+replacement inherits the duty. Blocking delivery has no stream, so it is
+unaffected either way.
+
 ### Calling the API directly
 
 You don't need any of the Rails glue to use the client:
@@ -208,7 +217,7 @@ Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 | Object | Purpose |
 |---|---|
 | `Wavebird::Engine` | mount at any prefix; provides `POST /wavebird/sponsor_slot` |
-| `Wavebird::SessionId` | controller concern → `wavebird_session_id` (anonymous `sess_` token) |
+| `Wavebird::SessionId` | controller concern → `wavebird_session_id` (anonymous `sess_` + UUID). Substituting your own id is supported, but it must be **unguessable and per-browser** — see the note under async delivery |
 | `Wavebird::SlotHelper#wavebird_slot(endpoint:, session_id:, position:, async:, **html)` | the hidden `<section>` the renderer fills |
 | `Wavebird::SlotHelper#wavebird_render_script_tag` | loads `render.js`, once per page |
 | `Wavebird::SponsorSlotsController` | the server endpoint the browser POSTs to |
