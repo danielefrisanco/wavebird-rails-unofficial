@@ -369,9 +369,47 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   Phase 11 (needs a full `rails new` + network install).
 - [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
   this** — it is user-invoked and billed.
-- [ ] Run `/security-review`: key handling, log redaction, no PII pathways,
+- [x] Run `/security-review`: key handling, log redaction, no PII pathways,
   no secret in any JSON/HTML output (acceptance §5 has an explicit test).
-  **Daniele must trigger this.**
+  Run 2026-08-11 over `55563e0..HEAD` (35 files). Key handling, redaction and the
+  token boundary came back clean; one finding, below. Note the command needs a
+  `git` base to diff against and there is still no remote — it was pointed at the
+  last-reviewed commit via a temporary local ref.
+- [ ] **Fix: `click_url` crosses to the browser with no scheme allowlist**
+  (`slot_payload.rb:150`, from the 2026-08-11 security review). `passthrough_render`
+  forwards the API's `render.click_url` unchanged. The hosted renderer assigns it
+  straight to `link.href` on an anchor styled `position:absolute;inset:0;z-index:2`
+  — full-bleed over the creative, and in the **host page's** DOM, not inside the
+  `sandbox='allow-scripts'` iframe. Its own guard is `str()`, which only checks for
+  a non-empty string. A creative whose destination is `javascript:…` therefore runs
+  in the host's origin on the first click of the ad.
+
+  This is a field we used to withhold: before #021 the payload carried only
+  `frame_url`, `script_url`, `width`, `height`, `label_text` and `sponsor_name`
+  (`git show 55563e0:lib/wavebird/slot_payload.rb:86-96`). Widening the passthrough
+  was right for the render block generally, but `click_url` is the one member of it
+  that becomes *executable* in the host page.
+
+  **Verify before fixing, per WAY_OF_WORK rule 1.** A direct Script Tag install
+  hands the identical `click_url` to the identical renderer, so wavebird may
+  already validate the scheme server-side — in which case this is defence in depth
+  rather than an open hole. Ask the sandbox: submit a placement and see whether any
+  non-http(s) scheme can come back in `render.click_url`. That answer decides
+  whether this is a fix or a hardening note.
+
+  **Fix if unvalidated:** allowlist `http`/`https` where the payload is built,
+  reusing `present_string`; drop the field otherwise. A non-clickable ad is the
+  pre-#021 behaviour and strictly better than executing the URL. Add a spec with a
+  `javascript:` scheme, and record the decision either way.
+- [ ] **Docs only, from the same review:** `SessionId` documents that hosts may
+  pass their own id instead of `wavebird_session_id` (`session_id.rb:19-20`). The
+  gem's own id is `"sess_#{SecureRandom.uuid}"`, so the async stream scope of #015
+  holds — the endpoint takes `session_id` from the request and derives the
+  broadcast target from it, which is only safe because that value is unguessable.
+  A host substituting a sequential or user-derived id silently reopens the
+  cross-session injection #015 closed. Not a vulnerability today; the docs should
+  say the substitute must be unguessable and per-browser, rather than leaving it
+  as an unqualified "pass that value instead".
 - [x] Manual sandbox smoke test with an `sk_test_...` key against the §3.1 example
   (acceptance §4). Run 2026-08-04 as a real host app on localhost against the live
   sandbox — the first time the gem met the **real** hosted `render.js`. It found
