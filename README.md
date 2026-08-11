@@ -313,7 +313,46 @@ These are wavebird's own product rules, baked in as behavior rather than advice:
   what the hosted renderer needs.
 
 The session id the gem generates is a random anonymous `sess_` token, not a user
-identifier.
+identifier. If you substitute your own, it must be unguessable and per-browser —
+async delivery scopes its Turbo Stream to it.
+
+### Scrubbing PII before it leaves your app
+
+The rules above cover what *this gem* sends. They say nothing about what you might
+put in the values you hand it, or what your own logs collect — both are your app's
+side of the boundary, and worth separating:
+
+| Concern | Owner | What it does |
+|---|---|---|
+| Egress scrubbing | your app | strip PII so it never reaches wavebird at all |
+| Signal reduction | wavebird's backend | rebuilds a reduced request for buyers; prompts are never forwarded |
+| Log scrubbing | your app | keep PII out of your Rails log |
+
+wavebird's own guarantee covers the middle row only. The first and third are
+yours, and they are worth wanting even when wavebird is fully trusted — defence in
+depth, and sometimes a compliance requirement not to send certain data to *any*
+third party.
+
+[`data_redactor`](https://github.com/danielefrisanco/data_redactor) pairs well
+here. It is **not** a dependency of this gem and will not be: wavebird-rails stays
+pure-Ruby with a light footprint (faraday, railties), and that gem ships a C
+extension. Opt in from your own app if you want it:
+
+```ruby
+# Egress: redact before handing anything to the client.
+Wavebird.client.create_placement(job_type: "chat", session_id: session_id,
+                                 topic: DataRedactor.redact(topic))
+
+# Logs: redact_deep walks nested values and returns a copy, so the redacted
+# structure is what gets logged while the original still goes to wavebird.
+Wavebird.configure do |c|
+  c.logger = RedactingLogger.new(Rails.logger) { |payload| DataRedactor.redact_deep(payload) }
+end
+```
+
+This extends the discipline already in the gem — `secret_key` and `asset_token`
+are masked in `inspect` and in every instrumentation payload — from known-secret
+fields to PII in free text.
 
 ### Consent flags are yours to send
 

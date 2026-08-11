@@ -67,7 +67,11 @@ branch, 18 system, 60 files inspected with no offenses.
 `bundle exec rake`. Whenever the repo is pushed, this failure is what the first
 CI run reports, on all 10 matrix legs, unless it is fixed first.
 
-## data_redactor as an optional integration
+## data_redactor as an optional integration — **done 2026-08-11**
+
+Recommended in the README's privacy section ("Scrubbing PII before it leaves your
+app"), with the two-hop table, both recipes, and an explicit note that it is not
+and will not be a dependency. Kept here for the reasoning.
 
 `data_redactor` (https://github.com/danielefrisanco/data_redactor) is a good
 companion for wavebird-rails users who want PII scrubbing. **Recommend it in
@@ -96,20 +100,27 @@ requirement not to send card numbers to any third party).
 
 ### Recipe 1 — egress scrubbing (hop 1)
 
-Caller redacts before handing the prompt to the client:
+Caller redacts before handing anything to the client:
 
 ```ruby
-client.create_job(
+Wavebird.client.create_placement(
   job_type: "chat",
-  context: { topic: "cloud deployment" },
-  prompt: { text: DataRedactor.redact(user_prompt) }
+  session_id: session_id,
+  topic: DataRedactor.redact(topic)
 )
 ```
 
-**Requirement this places on Phase 4:** `prompt` must stay reachable and
-transformable by the caller before send. No implicit redaction inside the gem
-— the client stays a faithful forwarder (as upstream is, see
-`wavebird-client.ts:297-307`), the policy stays the user's.
+> **Corrected 2026-08-11.** This recipe was written in Phase 4 planning against
+> a `context:` / `prompt: { text: }` shape that never shipped. The gem has no
+> parameter that accepts user text at all — `topic:` takes a single coarse hint
+> and nothing else (decision #019), which makes the surface for egress leaks much
+> smaller than this section originally assumed. The README carries the accurate
+> version.
+
+**The requirement it placed on Phase 4 held:** whatever the caller sends stays
+reachable and transformable before send. No implicit redaction inside the gem —
+the client stays a faithful forwarder (as upstream is, `wavebird-client.ts:297-307`),
+and the policy stays the user's.
 
 ### Recipe 2 — log scrubbing
 

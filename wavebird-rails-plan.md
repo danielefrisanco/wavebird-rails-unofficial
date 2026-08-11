@@ -494,8 +494,11 @@ not a docs problem. Raised by Daniele.
   made the example fail on a clean machine for reasons having nothing to do with
   this gem; and the Rack handler namespace moved between rack 2, rack 3 and the
   extracted `rackup` gem, so it uses `Puma::Server` directly.
-- [ ] Optional: promote the scratchpad chat demo into a runnable
-  `rake wavebird:demo`, so "see it working" is one command.
+- [x] Optional: a runnable demo so "see it working" is one command —
+  **superseded 2026-08-11.** `examples/single_file_chat.rb` already is one
+  command (`bundle exec ruby examples/single_file_chat.rb`) and lives in the
+  repo, where a rake task wrapping a scratchpad app would not. Not adding a task
+  that only re-spells a command the example already documents.
 
 **Open:** does this land in 0.1.0 (before Phase 11) or straight after? Shipping a
 gem whose install is documented-but-fiddly is defensible for a 0.1.0; shipping
