@@ -25,9 +25,11 @@ import { Controller } from "@hotwired/stimulus";
 //     CustomEvent (on the slot element or a descendant) carrying `detail.work`,
 //     the function that runs the AI turn. This controller wraps it in
 //     `withTurn`, injecting the stable `session_id` as the explicit request body
-//     (render.js's own default body is just a random uuid, so path C alone can
-//     not carry our session id). If `window.wavebird` is unavailable, it runs
-//     `detail.work()` unwrapped so the chat turn is never blocked.
+//     (render.js's own default body is just a random uuid, so the bare selector
+//     form of path C would send a fresh session per turn — a caller passing
+//     `{target, body}` themselves gets the same result without this controller,
+//     which is the path INSTALL.md leads with). If `window.wavebird` is
+//     unavailable, it runs `detail.work()` unwrapped so the turn is never blocked.
 export default class extends Controller {
   static targets = ["signal"];
 

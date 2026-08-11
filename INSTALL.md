@@ -1,14 +1,101 @@
 # Installing wavebird-rails in a host app
 
-This guide covers the browser half of the integration — registering the
-`wavebird` Stimulus controller so a sponsor slot rendered by the `wavebird_slot`
-view helper comes alive. The server half (the mounted engine, the
-`create_placement` call, credentials) is covered in the README.
+This guide covers the browser half of the integration. The server half (the
+mounted engine, the `create_placement` call, credentials) is covered in the
+README.
 
-The controller loads the hosted `render.js` once per page and bridges your chat
-turn into `window.wavebird.withTurn(...)`. It **degrades silently**: if
-`render.js` never loads, the slot simply stays hidden and your chat turn runs
-untouched.
+There are two ways to bring a slot alive, and **most apps want the first one.**
+
+| | Setup | Use it when |
+|---|---|---|
+| **[Plain JavaScript](#the-short-path--plain-javascript)** | render-script tag, a slot, one call | Almost always. No importmap pins, no Stimulus registration, no asset load path |
+| **[Stimulus controller](#the-stimulus-path)** | the above, plus 2 pins, an asset path and a controller registration | You want turns dispatched as DOM events, or the controller's async Turbo Stream handling |
+
+Both end up calling the same `window.wavebird.withTurn(...)` from the hosted
+`render.js`, and both **degrade silently**: if `render.js` never loads, the slot
+stays hidden and your chat turn runs untouched.
+
+The Stimulus path is not the more capable one — it is the more *convenient* one
+if your front end is already event-driven. Everything it does, including sending
+your stable session id, the plain path can do in one extra line.
+
+---
+
+# The short path — plain JavaScript
+
+Three steps, matching wavebird's own integration brief.
+
+**1. Let your views use the helpers** (once, in `app/controllers/application_controller.rb`):
+
+```ruby
+class ApplicationController < ActionController::Base
+  helper Wavebird::SlotHelper
+end
+```
+
+**2. Render the script tag and a slot:**
+
+```erb
+<%= wavebird_render_script_tag %>
+
+<%= wavebird_slot endpoint: wavebird.sponsor_slot_path,
+                  session_id: wavebird_session_id,
+                  position: "below" %>
+```
+
+**3. Wrap your chat turn:**
+
+```js
+const slot = document.querySelector("#wavebird-slot-below");
+
+window.wavebird.withTurn(
+  {
+    target: slot,
+    body: {
+      session_id: slot.dataset.wavebirdSessionIdValue,
+      position: slot.dataset.wavebirdPositionValue,
+    },
+  },
+  () => sendChatMessage(message),
+);
+```
+
+That is the whole integration. No importmap pins, no asset load path, no
+Stimulus.
+
+**Why the options object rather than the one-liner.** `withTurn` also takes a
+bare selector:
+
+```js
+window.wavebird.withTurn("#wavebird-slot-below", () => sendChatMessage(message));
+```
+
+which is shorter but uses `render.js`'s **default body — a fresh random session
+id per turn**. Passing `body` explicitly sends the stable
+`wavebird_session_id` your app already has, which is what keeps a visitor's turns
+attributable to one session. The slot element carries both values as data
+attributes for exactly this reason, so no extra plumbing is needed. (The
+behaviour is pinned by a spec against the dated `render.js` snapshot, so an
+upstream change cannot silently downgrade it.)
+
+**If `render.js` might not have loaded yet**, guard on it — your chat turn must
+never depend on the ad path:
+
+```js
+const send = () => sendChatMessage(message);
+if (window.wavebird?.withTurn) {
+  window.wavebird.withTurn({ target: slot, body: { /* … */ } }, send);
+} else {
+  send();
+}
+```
+
+---
+
+# The Stimulus path
+
+Everything above still applies; this adds a controller that dispatches turns as
+DOM events and handles the async Turbo Stream mode. Skip it unless you want that.
 
 The gem ships two JavaScript files under `app/javascript/`:
 
@@ -18,8 +105,6 @@ The gem ships two JavaScript files under `app/javascript/`:
 | `wavebird/index.js` | `registerWavebirdControllers(application)` helper |
 
 Pick the section matching your app's JavaScript setup.
-
----
 
 ## Option 1 — importmap-rails (the Rails 7+ default)
 
@@ -81,19 +166,11 @@ Pick the section matching your app's JavaScript setup.
 
 ---
 
-## Using the slot in a view
+## The slot markup
 
-The engine isolates its namespace, so its view helpers are not mixed into your
-app's views automatically. Opt in once:
-
-```ruby
-# app/controllers/application_controller.rb
-class ApplicationController < ActionController::Base
-  helper Wavebird::SlotHelper
-end
-```
-
-Then render a slot and the render-script tag:
+Unchanged from the short path — the same `wavebird_slot` call emits a hidden
+`<section data-controller="wavebird" ...>`, which is what the registered
+controller attaches to:
 
 ```erb
 <%= wavebird_render_script_tag %>
@@ -103,24 +180,18 @@ Then render a slot and the render-script tag:
                   position: "below" %>
 ```
 
-This emits a hidden `<section data-controller="wavebird" ...>`. The
-`wavebird_render_script_tag` helper loads `render.js` for you; the controller
-also loads it as a fallback, so the tag is optional but recommended (it lets the
-browser start fetching the script earlier).
+`wavebird_render_script_tag` loads `render.js` for you; the controller also loads
+it as a fallback, so the tag is optional but recommended (it lets the browser
+start fetching the script earlier).
 
 ---
 
-## Wiring your chat turn
-
-There are two ways to hand your chat send/generate function to wavebird. Both
-end up calling `window.wavebird.withTurn(...)` around your work. Pick whichever
-fits your front end — you do not need both.
-
-### Path A — dispatch a `wavebird:turn` event (Stimulus-idiomatic)
+## Wiring your chat turn through the controller
 
 Dispatch a DOM event on the slot element (or any descendant), carrying the work
 to run as `detail.work`. The controller wraps it in a wavebird turn and injects
-the slot's stable `session_id` automatically:
+the slot's stable `session_id` automatically — this is the convenience the
+Stimulus path buys you over building the body yourself:
 
 ```js
 const slot = document.querySelector("#wavebird-slot-below");
@@ -145,28 +216,10 @@ slot.dispatchEvent(new CustomEvent("wavebird:turn", {
 If `window.wavebird` has not loaded, the controller still runs `detail.work()`
 unwrapped, so your chat turn is never blocked.
 
-### Path C — call the global directly (faithful to the vendor SDK)
-
-Exactly as the wavebird integration brief documents — no Stimulus coupling:
-
-```js
-window.wavebird.withTurn("#wavebird-slot-below", () => sendChatMessage(message));
-```
-
-Guard on availability if `render.js` may not have loaded yet:
-
-```js
-const send = () => sendChatMessage(message);
-if (window.wavebird?.withTurn) {
-  window.wavebird.withTurn("#wavebird-slot-below", send);
-} else {
-  send();
-}
-```
-
-Note: path C uses `render.js`'s default request body (a random session id per
-turn). To send your app's **stable** `wavebird_session_id`, use path A, which
-injects it from the slot's Stimulus value.
+Calling `window.wavebird.withTurn(...)` directly still works on a Stimulus slot —
+the two do not conflict, and the plain form from
+[the short path](#the-short-path--plain-javascript) is the escape hatch when a
+particular turn needs a body the controller does not build.
 
 ---
 

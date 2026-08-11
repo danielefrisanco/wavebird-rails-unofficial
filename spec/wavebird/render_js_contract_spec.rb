@@ -99,6 +99,19 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
       expect(snapshot).to include("data-wavebird-endpoint")
     end
 
+    # INSTALL.md leads with the no-Stimulus path, and tells hosts to pass their
+    # stable session id as an explicit body. That only works because
+    # readTurnOptions treats an object carrying target/endpoint/body as options
+    # and uses the given body instead of defaultBody()'s random uuid. If upstream
+    # drops that branch, the documented path silently reverts to a fresh session
+    # per turn — which looks like working code and quietly breaks attribution.
+    it "still lets a caller pass an explicit request body" do
+      expect(snapshot).to include("'body'in input"),
+                          "upstream render.js no longer accepts an options object with a body; the " \
+                          "no-Stimulus path in INSTALL.md can no longer carry a stable session_id"
+      expect(snapshot).to include("body:isOptions&&'body'in input?input.body:defaultBody()")
+    end
+
     it "still resolves a placement the way the gem's payload assumes" do
       WAVEBIRD_RESOLUTION_PATH.each do |what, source|
         expect(snapshot).to include(source),

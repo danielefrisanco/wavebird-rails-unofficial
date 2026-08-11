@@ -50,8 +50,9 @@ Wavebird.configure do |c|
 end
 ```
 
-The browser half — registering the Stimulus controller for your importmap or
-bundler setup — is covered step by step in [INSTALL.md](INSTALL.md).
+That is the whole server-side install. The browser half needs no build-tool setup
+at all — see the Quickstart below, or [INSTALL.md](INSTALL.md) for the optional
+Stimulus controller and your importmap/bundler wiring.
 
 ## Quickstart
 
@@ -89,23 +90,41 @@ Nothing is visible until a placement actually fills.
 ```js
 const slot = document.querySelector("#wavebird-slot-below");
 
+window.wavebird.withTurn(
+  {
+    target: slot,
+    body: {
+      session_id: slot.dataset.wavebirdSessionIdValue,
+      position: slot.dataset.wavebirdPositionValue,
+    },
+  },
+  () => sendChatMessage(message),
+);
+```
+
+`withTurn` requests a placement for the turn while your AI answer generates. On a
+fill the slot reveals itself and the hosted frame renders inside it; on a no-fill
+it stays hidden. **Either way `sendChatMessage` runs** — including when
+`render.js` is blocked or never loads.
+
+That is the whole browser integration: no importmap pins, no asset load path, no
+Stimulus registration. The slot carries its session id and position as data
+attributes so the request body can be built inline — passing it explicitly is
+what sends your app's *stable* session id rather than the random one `render.js`
+would generate per turn.
+
+**Prefer DOM events?** Register the shipped Stimulus controller and dispatch
+instead — it builds that body for you:
+
+```js
 slot.dispatchEvent(new CustomEvent("wavebird:turn", {
   detail: { work: () => sendChatMessage(message) },
 }));
 ```
 
-The controller wraps your `work` in `window.wavebird.withTurn(...)`, which
-requests a placement for the turn while your AI answer generates. On a fill the
-slot reveals itself and the hosted frame renders inside it; on a no-fill it stays
-hidden. **Either way `sendChatMessage` runs** — including when `render.js` is
-blocked or never loads.
-
-If you'd rather not couple to Stimulus, call the global exactly as the vendor
-brief documents:
-
-```js
-window.wavebird.withTurn("#wavebird-slot-below", () => sendChatMessage(message));
-```
+That path costs two importmap pins, an asset load path entry and a controller
+registration; it is a convenience, not extra capability. See
+[INSTALL.md](INSTALL.md#the-stimulus-path).
 
 A complete, copy-pasteable version of these files — plus the initializer and the
 route — lives in

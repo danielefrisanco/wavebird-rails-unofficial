@@ -402,11 +402,17 @@ not a docs problem. Raised by Daniele.
   `config/initializers/wavebird.rb`, adds the importmap pins and asset path, and
   wires `helper`/`include` into `ApplicationController`. Idempotent; prints what
   it changed. This is the standard Rails answer (Devise, Turbo, Stimulus).
-- [ ] Lead the docs with the **no-Stimulus path**. Path C
-  (`window.wavebird.withTurn("#wavebird-slot-below", work)`) needs neither
-  importmap pins nor controller registration — steps 5 and 6 vanish. It already
-  works (decision #008) but the docs present the Stimulus path first, so it reads
-  as mandatory when it is not. Cheapest available win; do this regardless.
+- [x] Lead the docs with the **no-Stimulus path** — **done 2026-08-07**. Path C
+  needs neither importmap pins nor controller registration, so steps 5 and 6
+  vanish; it already worked (decision #008) but the docs presented Stimulus
+  first, so it read as mandatory. README and INSTALL now lead with it.
+  The restructure turned up a substantive correction: the docs claimed path C
+  could not carry a stable `session_id`. That is true only of the bare selector
+  form. `readTurnOptions` in the render.js snapshot honours
+  `withTurn({target, body}, work)`, so the plain path is full-fidelity, not a
+  degraded one — the slot already exposes its session id and position as data
+  attributes. Pinned by a contract spec so an upstream change cannot silently
+  downgrade it back to a random session per turn.
 - [ ] **Improve the examples** (raised again by Daniele, 2026-08-07). Move to
   single-file, copy-pasteable examples instead of the current directory of
   fragments — upstream ships `browser-chat.html`, `node-server.ts`,
