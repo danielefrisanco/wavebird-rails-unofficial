@@ -444,10 +444,26 @@ The vendor's own path is three steps (`<script>`, a div, `withTurn`). If the
 Rails port is harder to adopt than the thing it wraps, that is a product problem,
 not a docs problem. Raised by Daniele.
 
-- [ ] `rails g wavebird:install` — mounts the engine, writes
-  `config/initializers/wavebird.rb`, adds the importmap pins and asset path, and
-  wires `helper`/`include` into `ApplicationController`. Idempotent; prints what
-  it changed. This is the standard Rails answer (Devise, Turbo, Stimulus).
+- [x] `rails g wavebird:install` — **done 2026-08-11.** Mounts the engine (with a
+  `--mount-at` option), writes `config/initializers/wavebird.rb` from a documented
+  template, and wires `helper`/`include` into `ApplicationController`. Idempotent
+  and it says what it skipped; it fills in only what is missing after a partial
+  manual install, and an app with no `ApplicationController` is a skip, not an
+  error. 15 specs drive it against throwaway app skeletons.
+
+  **The importmap pins and asset path are deliberately not automated** — the
+  original scope assumed them, but leading the docs with the plain path removed
+  the need: that install has no JS toolchain step to automate. Hosts who want
+  Stimulus follow INSTALL.md, where the pins belong to their own build setup.
+
+  Two things worth keeping. The generator's idempotency checks first read
+  *relative* paths, which resolve against the process CWD, not the target app —
+  so every check inspected **the gem's own** `config/routes.rb`, which mounts the
+  engine, and every install silently skipped itself. Thor's file *actions* are
+  destination-aware; plain `File.read` is not. And the initializer template is
+  `.tt`, not `.rb`: a loadable `.rb` under `lib/` is a config file that would run
+  itself if anything ever eager-loaded the directory. That needed a matching
+  gemspec glob, verified by building the gem and listing its contents.
 - [x] Lead the docs with the **no-Stimulus path** — **done 2026-08-07**. Path C
   needs neither importmap pins nor controller registration, so steps 5 and 6
   vanish; it already worked (decision #008) but the docs presented Stimulus

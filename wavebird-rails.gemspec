@@ -26,7 +26,11 @@ Gem::Specification.new do |spec|
   spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir.glob(
-    %w[lib/**/*.rb app/**/* config/**/*.rb examples/**/* LICENSE.txt CHANGELOG.md README.md INSTALL.md]
+    # lib/**/*.tt carries the install generator's templates, which are not .rb on
+    # purpose — Thor strips the suffix, and a loadable .rb under lib/ would be a
+    # config file that runs itself if anything ever eager-loaded the directory.
+    %w[lib/**/*.rb lib/**/*.tt app/**/* config/**/*.rb examples/**/*
+       LICENSE.txt CHANGELOG.md README.md INSTALL.md]
   ).select { |f| File.file?(f) }
   spec.require_paths = ["lib"]
 

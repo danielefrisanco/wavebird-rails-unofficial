@@ -32,9 +32,17 @@ Three design commitments shape the whole gem:
 
 ```sh
 bundle add wavebird-rails
+rails generate wavebird:install
 ```
 
-Then mount the engine and configure your credentials:
+The generator mounts the engine, writes `config/initializers/wavebird.rb`, and
+opts `ApplicationController` into the view helpers and the anonymous session id.
+It is idempotent and reports what it changed, so it is safe to re-run and safe
+after a partial manual install. It stops short of your views and JavaScript —
+where a slot belongs and which turn you hand to wavebird are yours to decide —
+and prints those two snippets at the end.
+
+Or do it by hand — mount the engine and configure your credentials:
 
 ```ruby
 # config/routes.rb
@@ -90,16 +98,15 @@ Nothing is visible until a placement actually fills.
 ```js
 const slot = document.querySelector("#wavebird-slot-below");
 
-window.wavebird.withTurn(
-  {
-    target: slot,
-    body: {
-      session_id: slot.dataset.wavebirdSessionIdValue,
-      position: slot.dataset.wavebirdPositionValue,
-    },
-  },
-  () => sendChatMessage(message),
-);
+const body = {
+  session_id: slot.dataset.wavebirdSessionIdValue,
+  position: slot.dataset.wavebirdPositionValue,
+};
+// Only set when the slot opted into async delivery. The endpoint reads the mode
+// from the body, so omitting it silently serves the blocking path.
+if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
+window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
 ```
 
 `withTurn` requests a placement for the turn while your AI answer generates. On a
@@ -108,10 +115,11 @@ it stays hidden. **Either way `sendChatMessage` runs** — including when
 `render.js` is blocked or never loads.
 
 That is the whole browser integration: no importmap pins, no asset load path, no
-Stimulus registration. The slot carries its session id and position as data
-attributes so the request body can be built inline — passing it explicitly is
-what sends your app's *stable* session id rather than the random one `render.js`
-would generate per turn.
+Stimulus registration. The slot carries its session id, position and delivery
+mode as data attributes so the request body can be built inline — those three are
+exactly what the Stimulus controller forwards, so both paths send an identical
+body. Passing it explicitly is what sends your app's *stable* session id rather
+than the random one `render.js` would generate per turn.
 
 **Prefer DOM events?** Register the shipped Stimulus controller and dispatch
 instead — it builds that body for you:

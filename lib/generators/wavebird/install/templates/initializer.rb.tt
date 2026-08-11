@@ -1,0 +1,35 @@
+# frozen_string_literal: true
+
+# wavebird-rails configuration.
+#
+# This file must stay under config/ — never under app/assets or app/javascript,
+# where the secret key would become reachable from the browser. The gem's Railtie
+# raises Wavebird::ConfigurationError at boot if it ever lands there.
+Wavebird.configure do |config|
+  # sk_test_... (sandbox), sk_dry_... (production dry run) or sk_live_...
+  # A callable is also accepted and is resolved immediately before each request,
+  # which is what you want when a secrets manager rotates keys.
+  config.secret_key = Rails.application.credentials.dig(:wavebird, :secret_key)
+
+  # Your wavebird project id (wbproj_...).
+  config.client_id = Rails.application.credentials.dig(:wavebird, :client_id)
+
+  # Warnings only. The gem never writes the secret key or an asset token here.
+  config.logger = Rails.logger
+
+  # The shape you want the slot auctioned for, sent with every placement unless a
+  # call overrides it.
+  # config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
+
+  # The gem is fail-silent by design: a wavebird outage produces a no-fill rather
+  # than an exception, so your chat flow is never blocked. This hook is how you
+  # find out it happened.
+  # config.on_error = ->(error) { Rails.error.report(error, handled: true) }
+
+  # Auction defaults the browser is not allowed to set — brand safety, bid floors,
+  # targeting. These steer the auction, so they are server-side only.
+  # config.default_overrides = { blocked_categories: %w[gambling] }
+
+  # Consent, if your app collects it. The gem sends none unless you supply it.
+  # config.default_consent = { gdpr_applies: true }
+end

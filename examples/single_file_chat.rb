@@ -157,9 +157,13 @@ TEMPLATE = <<~'ERB'
             body: JSON.stringify({ message }),
           });
           const data = await response.json();
-          document.querySelector("#messages").insertAdjacentHTML(
-            "beforeend", `<p>${data.reply}</p>`
-          );
+          // textContent, not innerHTML/insertAdjacentHTML: a reply is untrusted
+          // content. Here it is only your own echo, but the moment this becomes a
+          // real model call the reply is attacker-influenceable through prompt
+          // injection, and an HTML sink turns that into XSS in your origin.
+          const line = document.createElement("p");
+          line.textContent = data.reply;
+          document.querySelector("#messages").appendChild(line);
         }
 
         const composer = document.querySelector("#composer");
@@ -177,17 +181,17 @@ TEMPLATE = <<~'ERB'
           //
           // The guard matters: if render.js was blocked or never loaded, the turn
           // still runs. The ad path must never be able to break the chat.
+          const body = {
+            session_id: slot.dataset.wavebirdSessionIdValue,
+            position: slot.dataset.wavebirdPositionValue,
+          };
+          // Present only when the slot was rendered with async: true. The
+          // endpoint reads the delivery mode from the body, so a slot that opted
+          // into async and does not send it quietly gets the blocking path.
+          if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
           if (window.wavebird?.withTurn) {
-            window.wavebird.withTurn(
-              {
-                target: slot,
-                body: {
-                  session_id: slot.dataset.wavebirdSessionIdValue,
-                  position: slot.dataset.wavebirdPositionValue,
-                },
-              },
-              send,
-            );
+            window.wavebird.withTurn({ target: slot, body }, send);
           } else {
             send();
           }

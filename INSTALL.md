@@ -23,7 +23,10 @@ your stable session id, the plain path can do in one extra line.
 
 # The short path — plain JavaScript
 
-Three steps, matching wavebird's own integration brief.
+Three steps, matching wavebird's own integration brief. **`rails generate
+wavebird:install` does step 1 for you**, along with mounting the engine and
+writing the initializer; steps 2 and 3 are yours either way, since only you know
+where the slot belongs and which turn to hand over.
 
 **1. Let your views use the helpers** (once, in `app/controllers/application_controller.rb`):
 
@@ -48,20 +51,21 @@ end
 ```js
 const slot = document.querySelector("#wavebird-slot-below");
 
-window.wavebird.withTurn(
-  {
-    target: slot,
-    body: {
-      session_id: slot.dataset.wavebirdSessionIdValue,
-      position: slot.dataset.wavebirdPositionValue,
-    },
-  },
-  () => sendChatMessage(message),
-);
+const body = {
+  session_id: slot.dataset.wavebirdSessionIdValue,
+  position: slot.dataset.wavebirdPositionValue,
+};
+// Only present when the slot was rendered with async: true. The endpoint reads
+// the delivery mode from the request body, so a slot that opted into async but
+// does not send it silently gets the blocking path instead.
+if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
+window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
 ```
 
 That is the whole integration. No importmap pins, no asset load path, no
-Stimulus.
+Stimulus. Those three data attributes are exactly what the Stimulus controller
+forwards, so the two paths send an identical request body.
 
 **Why the options object rather than the one-liner.** `withTurn` also takes a
 bare selector:
@@ -71,10 +75,11 @@ window.wavebird.withTurn("#wavebird-slot-below", () => sendChatMessage(message))
 ```
 
 which is shorter but uses `render.js`'s **default body — a fresh random session
-id per turn**. Passing `body` explicitly sends the stable
-`wavebird_session_id` your app already has, which is what keeps a visitor's turns
-attributable to one session. The slot element carries both values as data
-attributes for exactly this reason, so no extra plumbing is needed. (The
+id per turn**, and carries no position or delivery mode at all. Passing `body`
+explicitly sends the stable `wavebird_session_id` your app already has, which is
+what keeps a visitor's turns attributable to one session, and it is the only way
+async delivery reaches the endpoint. The slot element carries all three values as
+data attributes for exactly this reason, so no extra plumbing is needed. (The
 behaviour is pinned by a spec against the dated `render.js` snapshot, so an
 upstream change cannot silently downgrade it.)
 
@@ -84,7 +89,7 @@ never depend on the ad path:
 ```js
 const send = () => sendChatMessage(message);
 if (window.wavebird?.withTurn) {
-  window.wavebird.withTurn({ target: slot, body: { /* … */ } }, send);
+  window.wavebird.withTurn({ target: slot, body }, send);
 } else {
   send();
 }
@@ -262,8 +267,26 @@ pass your own, it inherits the requirement.
                   async: true %>
 ```
 
+The turn wiring is unchanged from the short path — **provided you forward
+`mode`**. The endpoint reads the delivery mode from the request body, so a slot
+rendered `async: true` whose turn omits it is served on the blocking path
+instead: the slot still fills, so nothing looks broken, but the latency saving is
+gone and the Turbo Stream subscription sits idle.
+
 ```js
-// dispatch the turn with mode: async in the request body
+const body = {
+  session_id: slot.dataset.wavebirdSessionIdValue,
+  position: slot.dataset.wavebirdPositionValue,
+};
+if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
+window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
+```
+
+On the Stimulus path the controller reads the same attribute and builds the same
+body, so dispatching the event is enough:
+
+```js
 slot.dispatchEvent(new CustomEvent("wavebird:turn", {
   detail: { work: () => sendChatMessage(message) },
 }));
