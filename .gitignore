@@ -9,6 +9,9 @@ upstream/
 /Gemfile.lock
 /gemfiles/*.lock
 /pkg/
+# `gem build` writes the artifact to the repo root, not pkg/, so ignore it there
+# too — it is a build output and it is large.
+/*.gem
 /coverage/
 /doc/
 /.yardoc/
