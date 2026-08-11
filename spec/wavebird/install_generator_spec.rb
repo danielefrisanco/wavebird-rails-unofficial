@@ -181,5 +181,13 @@ RSpec.describe Wavebird::Generators::InstallGenerator do
     it "says the app works before the keys are configured" do
       expect(capture_output([])).to include("fails silently")
     end
+
+    # The snippet a host copies has to carry the delivery mode, or a slot they
+    # later render with async: true is served on the blocking path without
+    # complaint. This shipped wrong once: the docs were corrected for it and the
+    # generator, written in the same session, was not.
+    it "forwards the delivery mode, so async slots are not silently downgraded" do
+      expect(capture_output([])).to include("slot.dataset.wavebirdModeValue")
+    end
   end
 end

@@ -42,7 +42,17 @@ RSpec.describe "documented turn body", :aggregate_failures do # rubocop:disable 
     expect(controller_body_keys).to include("session_id", "position", "mode")
   end
 
-  %w[INSTALL.md README.md examples/single_file_chat.rb].each do |path|
+  # Every place the gem hands a host a turn-body snippet. The generator belongs
+  # here for a reason: it was omitted from the first version of this list and
+  # promptly shipped without `mode`, which the docs had just been corrected for.
+  # A guard that covers most of the copies is a guard that reports success while
+  # the uncovered one drifts.
+  %w[
+    INSTALL.md
+    README.md
+    examples/single_file_chat.rb
+    lib/generators/wavebird/install/install_generator.rb
+  ].each do |path|
     it "#{path} builds the turn body from every field the Stimulus controller sends" do
       contents = doc(path)
 

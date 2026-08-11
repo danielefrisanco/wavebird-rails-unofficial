@@ -114,13 +114,17 @@ module Wavebird
                const slot = document.querySelector("#wavebird-slot-below");
                const send = () => sendChatMessage(message);
 
+               const body = {
+                 session_id: slot.dataset.wavebirdSessionIdValue,
+                 position: slot.dataset.wavebirdPositionValue,
+               };
+               // Set only when the slot was rendered async: true. The endpoint
+               // reads the delivery mode from the body, so omitting it quietly
+               // serves the blocking path instead.
+               if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
                if (window.wavebird?.withTurn) {
-                 window.wavebird.withTurn(
-                   { target: slot,
-                     body: { session_id: slot.dataset.wavebirdSessionIdValue,
-                             position: slot.dataset.wavebirdPositionValue } },
-                   send,
-                 );
+                 window.wavebird.withTurn({ target: slot, body }, send);
                } else {
                  send();
                }
