@@ -28,6 +28,17 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 # once Rails is loaded. Requiring "wavebird" alone gives the client with no glue.
 require "wavebird-rails"
 
+# Read the gitignored .env.test if it is there — the same file the test suite
+# uses for sandbox credentials, so a key you already configured for `rake` works
+# here without being repeated on the command line. Entirely optional: dotenv is a
+# development dependency, and without it the example still runs fail-silent.
+begin
+  require "dotenv"
+  Dotenv.load(File.expand_path("../.env.test", __dir__))
+rescue LoadError
+  nil
+end
+
 # --------------------------------------------------------------------------
 # 1. Configuration — the initializer a host app puts in config/initializers/.
 # --------------------------------------------------------------------------
@@ -43,6 +54,34 @@ Wavebird.configure do |config|
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
   config.on_error = ->(error) { warn("[wavebird] swallowed: #{error.class}: #{error.message}") }
+end
+
+# Reports which credentials are present without ever printing their values —
+# "not configured" mid-turn is a confusing way to learn a key was missing.
+module Wavebird
+  # Startup credential check for the examples.
+  module ExampleCredentials
+    module_function
+
+    def summary
+      parts = [describe("WAVEBIRD_SECRET_KEY", "sk_", Wavebird.configuration.secret_key),
+               describe("WAVEBIRD_CLIENT_ID", "wbproj_", Wavebird.configuration.client_id)]
+      return "credentials: #{parts.join(', ')} — expect real placements" if parts.all? { |p| p.end_with?("ok") }
+
+      "credentials: #{parts.join(', ')}\n  " \
+        "without both, every turn is a no-fill (slot hidden, chat still works)"
+    end
+
+    # Checks the prefix too: putting a secret key in CLIENT_ID is an easy slip,
+    # and it fails as a rejected placement rather than as a missing credential.
+    def describe(name, prefix, value)
+      value = value.to_s
+      return "#{name} missing" if value.empty?
+      return "#{name} set but does not start with #{prefix}" unless value.start_with?(prefix)
+
+      "#{name} ok"
+    end
+  end
 end
 
 # The whole Rails app. A real host has this in config/application.rb and needs
@@ -271,7 +310,7 @@ ERB
 
 port = ENV.fetch("PORT", 3000).to_i
 puts "\n  wavebird-rails — chat WITHOUT Hotwire -> http://localhost:#{port}"
-puts "  secret key: #{Wavebird.configuration.secret_key.to_s.empty? ? 'not set (expect no-fill)' : 'set'}\n\n"
+puts "  #{Wavebird::ExampleCredentials.summary}\n\n"
 
 # Puma's server API directly rather than a Rack handler: the handler namespace
 # moved between rack 2, rack 3 and the extracted rackup gem.

@@ -35,12 +35,51 @@ require "puma"
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "wavebird-rails"
 
+# Read the gitignored .env.test if it is there — the same file the test suite
+# uses for sandbox credentials, so a key you already configured for `rake` works
+# here without being repeated on the command line. Entirely optional: dotenv is a
+# development dependency, and without it the example still runs fail-silent.
+begin
+  require "dotenv"
+  Dotenv.load(File.expand_path("../.env.test", __dir__))
+rescue LoadError
+  nil
+end
+
 Wavebird.configure do |config|
   config.secret_key = ENV.fetch("WAVEBIRD_SECRET_KEY", "")
   config.client_id  = ENV.fetch("WAVEBIRD_CLIENT_ID", "")
   config.logger     = Logger.new($stdout)
   config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
   config.on_error = ->(error) { warn("[wavebird] swallowed: #{error.class}: #{error.message}") }
+end
+
+# Reports which credentials are present without ever printing their values —
+# "not configured" mid-turn is a confusing way to learn a key was missing.
+module Wavebird
+  # Startup credential check for the examples.
+  module ExampleCredentials
+    module_function
+
+    def summary
+      parts = [describe("WAVEBIRD_SECRET_KEY", "sk_", Wavebird.configuration.secret_key),
+               describe("WAVEBIRD_CLIENT_ID", "wbproj_", Wavebird.configuration.client_id)]
+      return "credentials: #{parts.join(', ')} — expect real placements" if parts.all? { |p| p.end_with?("ok") }
+
+      "credentials: #{parts.join(', ')}\n  " \
+        "without both, every turn is a no-fill (slot hidden, chat still works)"
+    end
+
+    # Checks the prefix too: putting a secret key in CLIENT_ID is an easy slip,
+    # and it fails as a rejected placement rather than as a missing credential.
+    def describe(name, prefix, value)
+      value = value.to_s
+      return "#{name} missing" if value.empty?
+      return "#{name} set but does not start with #{prefix}" unless value.start_with?(prefix)
+
+      "#{name} ok"
+    end
+  end
 end
 
 # The whole Rails app. Async delivery needs ActiveJob and Turbo Streams over
@@ -269,7 +308,7 @@ ERB
 
 port = ENV.fetch("PORT", 3000).to_i
 puts "\n  wavebird-rails — chat WITH Hotwire -> http://localhost:#{port}"
-puts "  secret key: #{Wavebird.configuration.secret_key.to_s.empty? ? 'not set (expect no-fill)' : 'set'}\n\n"
+puts "  #{Wavebird::ExampleCredentials.summary}\n\n"
 
 server = Puma::Server.new(Rails.application)
 server.add_tcp_listener("127.0.0.1", port)
