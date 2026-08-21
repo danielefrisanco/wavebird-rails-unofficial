@@ -160,7 +160,7 @@ module Wavebird
     # @param wait_ms [Integer, nil] long-poll wait; defaults to
     #   +config.long_poll_wait_ms+; +0+ sends a plain short poll
     # @return [Types::Decision] pending, no-fill or fill
-    def poll_decision(slot_id, wait_ms: nil)
+    def poll_decision_once(slot_id, wait_ms: nil)
       wait = clamp_wait_ms(wait_ms.nil? ? config.long_poll_wait_ms : wait_ms)
       response = request(:get, "/v1/decisions/#{encode(slot_id)}",
                          query: wait.positive? ? { wait_ms: wait } : nil,
@@ -297,7 +297,7 @@ module Wavebird
     # failed polls (reported, then swallowed — upstream behavior) both
     # continue the ladder.
     def poll_quietly(slot_id, wait_ms)
-      found = poll_decision(slot_id, wait_ms: wait_ms)
+      found = poll_decision_once(slot_id, wait_ms: wait_ms)
       found.ready? ? found : nil
     rescue Error => e
       report_swallowed_error(e)

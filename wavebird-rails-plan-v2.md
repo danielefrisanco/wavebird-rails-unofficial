@@ -29,7 +29,7 @@ the suite passing says the change is consistent, not that it is right.
 | **B** | `callback` delivery | ❌ **No** — ✔ recorded #025 | `callback_url` forces the legacy ingress body. Same boundary, same answer |
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
-| **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
+| **E** | `decision` rename | ✅ **Yes** — ✔ **DONE** (#026) | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
 | **G** | Test the examples | ✅ **Yes, first** — ✔ **COMPLETE** | First thing a new user runs; least tested code in the repo |
 
@@ -251,7 +251,7 @@ spec exists because this precise field went missing once already.
 
 ---
 
-## ✅ E. Surface size — **BUILD** the `decision` rename. Leave the other nine alone
+## ✅ E. Surface size — ✔ **RENAME DONE 2026-08-21** (#026). One item left
 
 **Daniele: "I feel it a bit strange."** Reasonable. Here is the whole picture.
 
@@ -292,7 +292,21 @@ request. They get a pending decision, no error, and no clue why. A silent
 behavioural difference behind a matching name. It has already caused a
 documentation drift once (parity.md, fixed 2026-08-11).
 
-- [ ] **Rename `decision` → `poll_decision`** on both `Client` and `Facade`.
+> **DONE 2026-08-21 — decision #026.** Renamed to **`poll_decision_once`**
+> (Daniele's choice of the three), kept public, YARD rewritten on both, CHANGELOG
+> updated, `docs/parity.md` / `README.md` / `docs/parity-findings.md` moved with
+> it. The parked branch was **rebased onto current `main` and renamed**, not
+> merged as written — its `poll_decision` was the wrong name and it predated item
+> G. Gate green.
+>
+> **Correction to this plan, worth keeping:** it claimed merging the parked
+> branch would delete item G, citing a `git diff main..branch` file list. That
+> was wrong — a tip-to-tip diff reports everything `main` has and the branch
+> lacks as a deletion; the commit itself touches 6 files, and neither a merge nor
+> a rebase would have removed anything. The real objection was only ever the
+> name.
+
+- [x] **Rename `decision` → `poll_decision_once`** on both `Client` and `Facade`.
   Small and contained: two definitions, one internal call site in the ladder, and
   the specs. Free right now — nothing is published — and not free later.
 
@@ -323,24 +337,24 @@ documentation drift once (parity.md, fixed 2026-08-11).
   | `await_decision(slot_id)` | the ladder | `getDecision` |
   | `poll_decision(slot_id, wait_ms:)` | one request | `pollDecisionOnce` (private) |
 
-- [ ] **Do not make it private.** It wraps `GET /v1/decisions/{slot_id}` 1:1, and
+- [x] **Do not make it private.** It wraps `GET /v1/decisions/{slot_id}` 1:1, and
   wrapping documented canonical endpoints is exactly what justifies
   `project_config`, `record_consent` and `activate_browser`. Removing it would be
   inconsistent with the rest of the surface, and a host driving its own polling
   loop has a legitimate use for it.
-- [ ] YARD on both: say plainly that this is **not** the `getDecision` equivalent
+- [x] YARD on both: say plainly that this is **not** the `getDecision` equivalent
   and point at `await_decision`. The comment is the part that stops the mistake
   recurring; the rename only stops it happening silently.
-- [ ] Decision entry — it is a public API change, even pre-publication.
+- [x] Decision entry — **#026**.
 
 **Open before that branch can merge:**
 
-- [ ] **The name.** `poll_decision` is the branch's choice. `decision_once` and
+- [x] **The name.** ✔ **Daniele chose `poll_decision_once`** (2026-08-21). `poll_decision` was the branch's choice. `decision_once` and
   `poll_decision_once` both say "one" more loudly; `poll_decision` reads better
   next to `await_decision`. Pick deliberately — this is the last cheap moment.
-- [ ] **Whether it stays public at all.** Keeping it is the recommendation above,
+- [x] **Whether it stays public at all.** ✔ **Stays public** (#026). Keeping it is the recommendation above,
   but it is a real question and the branch assumes the answer.
-- [ ] **CHANGELOG.** Untouched on the branch.
+- [x] **CHANGELOG.** ✔ Done — was untouched on the branch.
 - **`activate_browser`** — for the Script Tag / pure-browser path, which this gem
   does not otherwise serve. Is any host of *this gem* going to call it? If not,
   it is surface with no user.
@@ -362,7 +376,9 @@ is expected, not a divergence.
   pure-browser path, which this gem does not otherwise support. If no host of
   *this* gem would call it, it is surface with no user — keep or drop on that
   basis, not on parity.
-- [ ] Put the framing in the **README's** API section. It currently lives only in
+- [x] Put the framing in the **README's** API section. ✔ Done — a blockquote
+  above the `Wavebird::Client` table, answering "why nine methods when the SDK
+  has four" where a reader actually meets the surface. It currently lives only in
   `docs/parity.md`, which most users never open, so the surface looks arbitrary
   at exactly the moment a reader meets it.
 
@@ -581,8 +597,9 @@ question is cheap and stops it being reopened from the wrong premise.
    `spec/wavebird/runnable_examples_spec.rb`. Note the prescribed ERB-compile
    check did not work and was replaced; see the correction under G. **Next up is
    step 3, which needs Daniele's call on the method name first.**
-3. **E — the rename** ✅ — the only item that gets harder after publication.
-   Branch `rename-poll-decision` (`4aff31a`) exists but is unreviewed.
+3. ~~**E — the rename**~~ ✅ — **DONE 2026-08-21** as `poll_decision_once`
+   (#026). **One item in section E is still open: the `activate_browser` audit**,
+   which needs Daniele's keep-or-drop call.
 4. ~~**G (3–4)**~~ ✅ — **DONE 2026-08-21**,
    `spec/system/runnable_examples_boot_spec.rb`. **Item G is complete.**
 5. **F** ✅ — the redactor seam, failing closed.

@@ -26,7 +26,7 @@ wavebird's canonical REST v1 API.
   `#create_placement` (`POST /v1/placements`, with the same `topic:`/`locale:`
   hints as the jobs route — both verified accepted by the API),
   `#create_job` (`POST /v1/jobs`),
-  `#decision` and `#await_decision` (`GET /v1/decisions/{slot_id}`),
+  `#await_decision` and `#poll_decision_once` (`GET /v1/decisions/{slot_id}`),
   `#record_beacon` (`POST /v1/beacons`), `#report_generation`
   (`POST /v1/jobs/{job_id}/generation/{event}`), `#record_consent`
   (`POST /v1/consent`), `#activate_browser` (`POST /v1/browser/activate`) and
@@ -34,7 +34,9 @@ wavebird's canonical REST v1 API.
   a no-fill is a first-class success, never an exception.
 - `#await_decision` ports the upstream polling ladder exactly: two long polls,
   then short polls with ×1.5 backoff capped at 2 s plus jitter, bounded by
-  `decision_timeout_ms`. Failed polls are reported and polling continues.
+  `decision_timeout_ms`. Failed polls are reported and polling continues. It is
+  the equivalent of the SDK's `getDecision`; `#poll_decision_once` is a single
+  request, named so it cannot be mistaken for it (#026).
 - `Wavebird::Facade` (what `Wavebird.client` returns) — the fail-silent layer
   that restores the upstream SDK's posture: every failure is reported through
   `on_error`/`logger` and returned as a "hide the slot and continue" value, so a

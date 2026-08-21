@@ -32,20 +32,20 @@ RSpec.describe Wavebird::Client, "decisions" do
   # than paying them.
   before { allow(client).to receive(:sleep) }
 
-  describe "#poll_decision" do
+  describe "#poll_decision_once" do
     it "long-polls with the configured wait_ms by default" do
       stub = stub_request(:get, decision_url)
              .with(query: { "wait_ms" => "1500" })
              .to_return(status: 200, body: JSON.generate(fill_body))
 
-      expect(client.poll_decision(slot_id)).to be_fill
+      expect(client.poll_decision_once(slot_id)).to be_fill
       expect(stub).to have_been_requested
     end
 
     it "omits wait_ms entirely for a short poll" do
       stub = stub_request(:get, decision_url).to_return(status: 200, body: JSON.generate(pending_body))
 
-      expect(client.poll_decision(slot_id, wait_ms: 0)).to be_pending
+      expect(client.poll_decision_once(slot_id, wait_ms: 0)).to be_pending
       expect(stub).to have_been_requested
     end
 
@@ -54,7 +54,7 @@ RSpec.describe Wavebird::Client, "decisions" do
              .with(query: { "wait_ms" => "5000" })
              .to_return(status: 200, body: JSON.generate(fill_body))
 
-      client.poll_decision(slot_id, wait_ms: 90_000)
+      client.poll_decision_once(slot_id, wait_ms: 90_000)
 
       expect(stub).to have_been_requested
     end
@@ -64,13 +64,13 @@ RSpec.describe Wavebird::Client, "decisions" do
              .with(query: { "wait_ms" => "1500" })
              .to_return(status: 200, body: JSON.generate(fill_body))
 
-      client.poll_decision("slot/weird id")
+      client.poll_decision_once("slot/weird id")
 
       expect(stub).to have_been_requested
     end
 
     it "rejects a non-numeric wait_ms" do
-      expect { client.poll_decision(slot_id, wait_ms: "soon") }
+      expect { client.poll_decision_once(slot_id, wait_ms: "soon") }
         .to raise_error(ArgumentError, /wait_ms must be a number/)
     end
   end

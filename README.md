@@ -192,7 +192,7 @@ break your flow.
 |---|---|---|
 | `create_placement(**)` | `Types::PlacementResponse` | synthetic no-fill response |
 | `create_job(**)` | `Types::AcceptedJob`, `Types::RateLimited`, `nil` | `nil` — except a 429, which returns `Types::RateLimited` (a result, not a failure: logged at `warn`, no `on_error`) |
-| `poll_decision(slot_id, **)` | `Types::Decision` | synthetic pending decision |
+| `poll_decision_once(slot_id, **)` | `Types::Decision` | synthetic pending decision |
 | `await_decision(slot_id)` | `Types::Decision` | synthetic pending decision (upstream's `fallbackDecision`) |
 | `record_beacon(**)` | `Types::BeaconResult` | `accepted: false`, `reason_code: "SDK_FAIL_SILENT"` |
 | `report_generation(job_id, event, **)` | `true` | `false` |
@@ -208,11 +208,23 @@ call is made).
 
 Instantiate directly (`Wavebird::Client.new`) when you want exceptions.
 
+> **Why there are nine methods here when the TypeScript SDK has four.** This gem
+> is a port of wavebird's **canonical API contract**, with the SDK as the
+> behavioural reference — not a port of the SDK's *surface*. So it wraps
+> documented canonical endpoints the SDK never wrapped (`create_placement`,
+> which is the primary route, plus `record_consent`, `activate_browser` and
+> `project_config`), while matching the SDK exactly wherever both exist.
+> `poll_decision_once` is the one method upstream keeps private; it is public
+> here for the same reason as the others — it wraps `GET /v1/decisions/{slot_id}`
+> 1:1 — and named so it can never be mistaken for `getDecision`, which is
+> `await_decision`. See [`docs/parity.md`](docs/parity.md) for the field-by-field
+> comparison and `docs/DECISIONS.md` #026.
+
 | Method | Endpoint | Notes |
 |---|---|---|
 | `create_placement(job_type:, wait_ms:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/placements` | **primary**: creates a job and waits for the first decision |
 | `create_job(job_type:, session_id:, locale:, slots_requested:, topic:, slot_hint:, overrides:, publisher:, consent:)` | `POST /v1/jobs` | advanced/compat; returns `slot_id`s without waiting. This route carries consent as `overrides.gdpr_applies` only — other flags are logged, not sent; use `create_placement` for the full object |
-| `poll_decision(slot_id, wait_ms:)` | `GET /v1/decisions/{slot_id}` | **one** poll; `wait_ms: 0` for a short poll. Use only when driving your own loop — `await_decision` is the equivalent of the SDK's `getDecision` |
+| `poll_decision_once(slot_id, wait_ms:)` | `GET /v1/decisions/{slot_id}` | **one** poll; `wait_ms: 0` for a short poll. Use only when driving your own loop — `await_decision` is the equivalent of the SDK's `getDecision` |
 | `await_decision(slot_id)` | `GET /v1/decisions/{slot_id}` | upstream polling ladder; raises `DecisionTimeoutError` on budget exhaustion |
 | `record_beacon(slot_id:, asset_token:, event:, beacon_id:, occurred_at:, metadata:)` | `POST /v1/beacons` | advanced — the hosted renderer already beacons; don't duplicate |
 | `report_generation(job_id, event, generation_id:, model_id:, usage_json:, error:)` | `POST /v1/jobs/{job_id}/generation/{event}` | `started\|finished\|failed` |
