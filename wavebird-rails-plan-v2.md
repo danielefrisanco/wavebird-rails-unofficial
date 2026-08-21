@@ -25,8 +25,8 @@ the suite passing says the change is consistent, not that it is right.
 
 | | Item | Verdict | Why |
 |---|---|---|---|
-| **A** | WebSocket transport | ❌ **No** | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
-| **B** | `callback` delivery | ❌ **No** | `callback_url` forces the legacy ingress body. Same boundary, same answer |
+| **A** | WebSocket transport | ❌ **No** — ✔ recorded #024 | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
+| **B** | `callback` delivery | ❌ **No** — ✔ recorded #025 | `callback_url` forces the legacy ingress body. Same boundary, same answer |
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
@@ -75,7 +75,7 @@ the wrong premise.
 
 ---
 
-## ❌ A. WebSocket decision transport — **DO NOT BUILD.** Record only
+## ❌ A. WebSocket decision transport — **DO NOT BUILD.** ✔ Recorded 2026-08-21
 
 **Verified 2026-08-11.** `createDecisionWsTicket` requests
 
@@ -104,14 +104,26 @@ session-scoped Turbo Stream now has it, but by convention rather than by
 construction, which is a weaker guarantee. If that ever bites again, the fix is
 to tighten our own scoping, not to import the wrapper transport.
 
-- [ ] **Record as a closed question** in `docs/DECISIONS.md`: the WS transport is
-  wrapper-only, therefore out of scope for a canonical-only client, and #001
-  stands unchanged for a reason stronger than "we preferred polling".
-- [ ] Amend the "Future — raised, not scheduled" entry in
+> **DONE 2026-08-21 — decision #024.** All three items below are complete. The
+> question is closed, not merely unscheduled. Nothing further to do on A.
+
+- [x] **Record as a closed question** in `docs/DECISIONS.md` (**#024**):
+  the WS transport is wrapper-only, therefore out of scope for a canonical-only
+  client, and #001 stands unchanged for a reason stronger than "we preferred
+  polling". Say explicitly that it is **not deprecated** — it is on the other side
+  of the canonical/legacy line, which is a different thing.
+- [x] **Update #001 itself.** Its closing line still read *"**Deferred todo:**
+  implement the Rails↔wavebird WS transport behind the same interface in a later
+  version"* — a promise we now know cannot be kept on the canonical route. Append
+  a pointer (`→ the deferred todo is closed by #024`) so a reader of the old entry
+  sees it. Appending rather than rewriting: the log is append-only by convention
+  (#016 supersedes #015 the same way), and erasing what we believed in July hides
+  that the question was genuinely reopened by reading the source.
+- [x] Amend the "Future — raised, not scheduled" entry in
   [wavebird-rails-plan.md](wavebird-rails-plan.md), which still frames this as an
   open design question with unknowns. It is not; the unknown is resolved.
 
-## ❌ B. `callback` delivery mode — **DO NOT BUILD.** Record only, and supersede #004
+## ❌ B. `callback` delivery mode — **DO NOT BUILD.** ✔ Recorded 2026-08-21, #004 superseded
 
 **Verified 2026-08-11.** `callback_url` is an explicit *condition* of
 `canUseCanonicalRequest` (`wavebird-client.ts:308–317`):
@@ -129,12 +141,26 @@ deprecated** — see the correction at the top — and it was not skipped for be
 deprecated. It is unreachable for exactly the same structural reason as the
 WebSocket: it lives on the legacy transport.
 
-- [ ] **Supersede decision #004.** It reads as a deferred design task ("design the
-  client so it can slot in post-v1 without breaking changes"), which implies the
-  work is possible on our current route. It is not, and leaving #004 as written
-  invites someone to attempt it. Record the finding and close it.
-- [ ] Add `callback_url` to the "legacy-only request fields" paragraph in
-  `docs/parity.md`, which lists the other five triggers but not this one.
+> **DONE 2026-08-21 — decision #025.** #004 is superseded and carries a pointer
+> to it. Nothing further to do on B.
+
+- [x] **Supersede decision #004** with a new entry (**#025**). #004
+  reads as a deferred design task ("design the client so it can slot in post-v1
+  without breaking changes"), which implies the work is possible on our current
+  route. It is not, and leaving #004 as written invites someone to attempt it.
+  Record the finding, and say that `callback` is **not deprecated** — the premise
+  this plan was written against was wrong, and #025 is where that gets corrected
+  permanently.
+- [x] **Update #004 itself**, same treatment as #001: append `→ superseded by
+  #025`, do not rewrite. Its "later todo" status is the single most misleading
+  line in the log right now, because it reads like scheduling rather than
+  impossibility.
+**No third item.** An earlier draft of this plan listed "add `callback_url` to the
+legacy-only request fields paragraph in `docs/parity.md`, which lists the other
+five triggers but not this one". That was stale on arrival: `callback_url` has
+been in that list since `61c3352` (2026-08-05, the #019 work), six days before
+this plan was written. Verified 2026-08-21 at `docs/parity.md:102`. Nothing to do
+— recorded here only so the item is not resurrected from an old copy.
 
 **If callback delivery is ever genuinely wanted**, the question to ask is not
 "port callback mode" but "do we adopt the legacy wrapper transport" — one
@@ -467,9 +493,13 @@ suite. This is the highest value-per-effort item in this plan.
 Only the ✅ items are work. The ❌ items still need **recording** — closing a
 question is cheap and stops it being reopened from the wrong premise.
 
-1. **A + B record** ❌ — two decision entries, two doc edits, no code. First
-   because #004 currently reads as "possible, just deferred", which invites
-   someone to attempt something structurally impossible.
+1. ~~**A + B record**~~ ❌ — **DONE 2026-08-21.** Two new decision entries (**#024**, **#025**), a pointer
+   appended to each of **#001** and **#004**, and one edit to
+   [wavebird-rails-plan.md](wavebird-rails-plan.md)'s "Future" section. No code.
+   First because #001 and #004 currently read as "possible, just deferred", which
+   invites someone to attempt something structurally impossible. Five edits, four
+   files — the `docs/parity.md` item once listed here was already done. **Next up
+   is step 2.**
 2. **G (1–2)** ✅ — parse + ERB-compile specs. Minutes; catches the two bugs that
    actually happened while writing the examples.
 3. **E — the rename** ✅ — the only item that gets harder after publication.
