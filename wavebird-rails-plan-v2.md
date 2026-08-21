@@ -31,7 +31,7 @@ the suite passing says the change is consistent, not that it is right.
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
-| **G** | Test the examples | ✅ **Yes, first** | First thing a new user runs; least tested code in the repo |
+| **G** | Test the examples | ✅ **Yes, first** — ✔ G1–G2 done | First thing a new user runs; least tested code in the repo |
 
 **A and B are one question, not two features.** Both are unreachable for the same
 structural reason, so the real decision is *"do we adopt the legacy wrapper
@@ -450,7 +450,7 @@ leak.
 **Reverses:** nothing. New surface beyond upstream — upstream has no equivalent —
 so it needs a decision entry as an addition.
 
-## ✅ G. Test the examples — **BUILD.** Highest value per effort
+## ✅ G. Test the examples — **BUILD.** ✔ G1–G2 done 2026-08-21; G3–G4 open
 
 **Today.** `spec/wavebird/examples_spec.rb` covers **only**
 `examples/chat_with_sponsored_slot/` — the non-runnable fragments. It checks they
@@ -463,12 +463,12 @@ new user runs, and they are the least tested code in the repo.
 
 **What a spec should assert**, cheapest first:
 
-1. **They parse** — `RubyVM::InstructionSequence.compile`, same as the fragments
-   spec already does. Catches the class of error that cost a debugging round
+1. ~~**They parse**~~ — **DONE.** `RubyVM::AbstractSyntaxTree.parse_file`, same
+   as the fragments spec. Catches the class of error that cost a debugging round
    during authoring.
-2. **The ERB templates compile** — the heredoc-quoting bug (`<%#{...}` parsing as
-   interpolation) produced a *valid Ruby file* with a broken template, so parsing
-   is not enough. Compile `TEMPLATE` with `ERB.new(...).src`.
+2. ~~**The ERB templates compile**~~ — **DONE, but not the way this plan said.**
+   See the correction below: `ERB.new(...).src` does not catch the bug it was
+   proposed for.
 3. **They boot and serve** — spawn on a free port, `GET /` expecting 200 with the
    slot markup, `POST /wavebird/sponsor_slot` expecting `{"fill": false}` with no
    key. This is the assertion that would have caught every bug found by hand.
@@ -488,6 +488,48 @@ suite. This is the highest value-per-effort item in this plan.
 
 ---
 
+### ✔ G1–G2 delivered 2026-08-21 — `spec/wavebird/runnable_examples_spec.rb`
+
+11 examples over both files. Gate green: 455 unit examples (was 444), 100% line +
+branch, 66 files RuboCop-clean, YARD 100%.
+
+> **Correction to item 2 above, found while building it.** `ERB.new(TEMPLATE).src`
+> **does not catch the heredoc-quoting bug**, so the check this plan prescribed
+> would have shipped a false sense of coverage.
+>
+> The historical bug turned `<%#{" "}comment %>` into `<% comment %>` — an *open
+> tag* whose body is English prose. Two things defeat the prescribed check.
+> First, Ruby constant-folds `#{" "}`, so the AST node stays a plain `STR` and
+> nothing about the literal looks dynamic. Second, prose like `This is a comment
+> about the slot` is *valid Ruby* (a chain of method calls), so `ERB`'s generated
+> source compiles cleanly and the broken template walks straight through.
+> Verified directly: that exact input compiles without raising.
+>
+> **What actually works, layered:**
+>
+> - **Assert the heredoc delimiter is quoted** — `TEMPLATE = <<~'ERB'`. The only
+>   check that names the real rule; everything else observes a consequence.
+> - **Count `<%#` in the raw heredoc body vs. in the evaluated `TEMPLATE`
+>   string** (taken from the AST, not by regex, so it is the string the
+>   interpreter would build). An eaten `#` changes the count. This is the check
+>   that is genuinely sensitive to the bug, and it survives someone
+>   reintroducing it with a different delimiter spelling.
+> - **Keep the ERB + generated-Ruby compile anyway.** It is blind to *this* bug
+>   but does catch an unclosed or malformed tag — the other way to ship a file
+>   that parses and a page that does not render.
+>
+> **Sensitivity was verified, not assumed.** Mutating `examples/chat_plain.rb`
+> to unquote the delimiter fails 1 example; adding the real `<%#{...}` shape on
+> top fails 3. Both mutations reverted. This step is deliberate: plan v2 already
+> records that the first version of `docs_turn_body_contract_spec` passed with
+> the code it guarded deleted, and a spec written from the same sitting as the
+> thing it tests earns no trust until it has been seen to fail.
+>
+> A guard example also asserts the `Dir.glob` matched exactly the two expected
+> files, so the whole spec cannot pass vacuously if `examples/` is renamed.
+
+---
+
 ## Suggested order
 
 Only the ✅ items are work. The ❌ items still need **recording** — closing a
@@ -500,8 +542,10 @@ question is cheap and stops it being reopened from the wrong premise.
    invites someone to attempt something structurally impossible. Five edits, four
    files — the `docs/parity.md` item once listed here was already done. **Next up
    is step 2.**
-2. **G (1–2)** ✅ — parse + ERB-compile specs. Minutes; catches the two bugs that
-   actually happened while writing the examples.
+2. ~~**G (1–2)**~~ ✅ — **DONE 2026-08-21**,
+   `spec/wavebird/runnable_examples_spec.rb`. Note the prescribed ERB-compile
+   check did not work and was replaced; see the correction under G. **Next up is
+   step 3, which needs Daniele's call on the method name first.**
 3. **E — the rename** ✅ — the only item that gets harder after publication.
    Branch `rename-poll-decision` (`4aff31a`) exists but is unreviewed.
 4. **G (3–4)** ✅ — boot-and-serve system specs for both examples.
