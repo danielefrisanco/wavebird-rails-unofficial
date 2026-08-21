@@ -21,6 +21,27 @@ the suite passing says the change is consistent, not that it is right.
 
 ---
 
+## Verdicts at a glance
+
+| | Item | Verdict | Why |
+|---|---|---|---|
+| **A** | WebSocket transport | ❌ **No** | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
+| **B** | `callback` delivery | ❌ **No** | `callback_url` forces the legacy ingress body. Same boundary, same answer |
+| **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
+| **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
+| **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
+| **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
+| **G** | Test the examples | ✅ **Yes, first** | First thing a new user runs; least tested code in the repo |
+
+**A and B are one question, not two features.** Both are unreachable for the same
+structural reason, so the real decision is *"do we adopt the legacy wrapper
+transport?"* — and answering it piecemeal is how a canonical-only client stops
+being one. Neither is deprecated; see the correction below.
+
+**Only E has a clock on it.** Everything else costs the same after publication.
+
+---
+
 ## ⚠️ Correction first: `callback` mode is not deprecated
 
 The brief for this plan assumed `callback` delivery was skipped because it is
@@ -54,7 +75,7 @@ the wrong premise.
 
 ---
 
-## A. WebSocket decision transport — **answered: no, and it is not about deprecation**
+## ❌ A. WebSocket decision transport — **DO NOT BUILD.** Record only
 
 **Verified 2026-08-11.** `createDecisionWsTicket` requests
 
@@ -90,7 +111,7 @@ to tighten our own scoping, not to import the wrapper transport.
   [wavebird-rails-plan.md](wavebird-rails-plan.md), which still frames this as an
   open design question with unknowns. It is not; the unknown is resolved.
 
-## B. `callback` delivery mode — **answered: same boundary, not deprecation**
+## ❌ B. `callback` delivery mode — **DO NOT BUILD.** Record only, and supersede #004
 
 **Verified 2026-08-11.** `callback_url` is an explicit *condition* of
 `canUseCanonicalRequest` (`wavebird-client.ts:308–317`):
@@ -120,7 +141,7 @@ WebSocket: it lives on the legacy transport.
 decision covering this, the WebSocket, and the richer consent flags together.
 Answering it piecemeal is how a canonical-only client stops being one.
 
-## C. The `asset_token → slot_id` memo
+## ❌ C. The `asset_token → slot_id` memo — **DO NOT BUILD** unless a host asks
 
 **Today.** `#record_beacon` requires `slot_id:`. Upstream keeps a private
 `slotIdByAssetToken` map (`wavebird-client.ts:811`), populated in
@@ -163,7 +184,7 @@ oversight.
 
 ---
 
-## D. React
+## ✅ D. React — **BUILD** the recipe and the example. **Not** the components
 
 **Today.** Hidden `<section>` + Stimulus + hosted `render.js` (#006, #008, #009).
 
@@ -204,7 +225,7 @@ spec exists because this precise field went missing once already.
 
 ---
 
-## E. Surface size — 10 public methods vs upstream's 4
+## ✅ E. Surface size — **BUILD** the `decision` rename. Leave the other nine alone
 
 **Daniele: "I feel it a bit strange."** Reasonable. Here is the whole picture.
 
@@ -312,7 +333,7 @@ is expected, not a divergence.
 
 ---
 
-## F. A redaction hook, without monkey-patching
+## ✅ F. A redaction hook, without monkey-patching — **BUILD**
 
 **Daniele's shape (2026-08-11):** *"there should be a method we call passing just
 the data that can be modified. If the code sets that method — like data_redactor
@@ -394,7 +415,7 @@ leak.
 **Reverses:** nothing. New surface beyond upstream — upstream has no equivalent —
 so it needs a decision entry as an addition.
 
-## G. Test the examples
+## ✅ G. Test the examples — **BUILD.** Highest value per effort
 
 **Today.** `spec/wavebird/examples_spec.rb` covers **only**
 `examples/chat_with_sponsored_slot/` — the non-runnable fragments. It checks they
@@ -434,28 +455,23 @@ suite. This is the highest value-per-effort item in this plan.
 
 ## Suggested order
 
-**A and B are already answered** — both are wrapper-only, neither is about
-deprecation. What remains for them is recording, not deciding, so they are cheap
-and should go early to stop the wrong framing spreading.
+Only the ✅ items are work. The ❌ items still need **recording** — closing a
+question is cheap and stops it being reopened from the wrong premise.
 
-1. **A + B record** — two decision entries and two doc edits. Closes both items.
-   Most valuable early because #004 currently reads as "possible, just deferred",
-   which invites someone to attempt something structurally impossible.
-2. **G (1–2)** — parse + ERB-compile specs for the two runnable examples. Minutes
-   of work; catches the two bugs that actually happened while writing them.
-3. **E — the `decision` rename.** Contained, and free only until the gem is
-   published. If any item here has a deadline, it is this one.
-4. **G (3–4)** — boot-and-serve system specs for both examples.
-5. **F** — the redactor seam, with the fail-closed question settled first.
-6. **D (1–2)** — React hook recipe + `examples/chat_react.rb`.
-7. **C** — the `slot_id` memo, only if a host asks.
+1. **A + B record** ❌ — two decision entries, two doc edits, no code. First
+   because #004 currently reads as "possible, just deferred", which invites
+   someone to attempt something structurally impossible.
+2. **G (1–2)** ✅ — parse + ERB-compile specs. Minutes; catches the two bugs that
+   actually happened while writing the examples.
+3. **E — the rename** ✅ — the only item that gets harder after publication.
+   Branch `rename-poll-decision` (`4aff31a`) exists but is unreviewed.
+4. **G (3–4)** ✅ — boot-and-serve system specs for both examples.
+5. **F** ✅ — the redactor seam, failing closed.
+6. **D (1–2)** ✅ — React hook recipe + `examples/chat_react.rb`.
+7. **C** ❌ — only if a host asks.
 
-**Nothing here blocks a release.** Item 3 is the only one that gets meaningfully
-harder afterwards, since renaming a published method is a breaking change rather
-than an edit. If the choice is between shipping and this plan, ship — but do 3
-first.
-
----
+**Nothing here blocks a release.** If the choice is between shipping and this
+plan, ship — but do step 3 first.
 
 ## How to work this plan
 
