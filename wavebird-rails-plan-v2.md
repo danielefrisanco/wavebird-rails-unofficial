@@ -370,12 +370,15 @@ leak.
 
 - [ ] **It must run inside the fail-silent boundary.** A redactor that raises
   must not take down a chat turn — same posture as `on_error` observers, which
-  are already swallowed. Open sub-question worth deciding explicitly: on a
-  raising redactor, do we send the **original** value or **drop** the field? Send
-  the original and a broken redactor silently leaks the thing it was installed to
-  catch. Drop it and a typo quietly degrades every auction. *Leaning toward drop
-  plus a warning* — failing closed is the right default for a privacy control —
-  but this is Daniele's call.
+  are already swallowed.
+
+  **Decided (Daniele, 2026-08-11): drop the field.** A broken redactor must never
+  leak the value it was installed to catch, so this fails closed. The cost is
+  accepted and is worth naming: a typo in a redactor silently degrades every
+  auction — `topic:` vanishes, fills get worse, and nothing errors. Mitigate by
+  logging at `warn` on every raise (not once — a persistently broken redactor
+  should stay noisy) and reporting through `on_error`, so the degradation is
+  visible rather than merely survivable.
 
 - [ ] **It must run after defaults merge**, or a host cannot see what is actually
   going out.
