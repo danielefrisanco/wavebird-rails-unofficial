@@ -65,6 +65,34 @@ module Wavebird
     #   upstream +onError+)
     attr_accessor :on_error
 
+    # A hook for filtering caller-supplied free text before it is sent to
+    # wavebird — a redaction/scrubbing seam that needs no monkey-patching, and
+    # the only way to filter the engine endpoint, whose caller is
+    # {SponsorSlotsController} inside this gem.
+    #
+    # Receives **one value at a time**, and only values a caller supplied as
+    # free text — today that is +topic:+ on {Client#create_placement} and
+    # {Client#create_job}. It is never handed +secret_key+, +client_id+,
+    # +consent+, +overrides+ or any structural part of the request. That is
+    # deliberate: a hook given the whole body could rewrite the credentials,
+    # drop the consent object, or inject the response-only fields this gem
+    # refuses to send. Handed one string, it structurally cannot.
+    #
+    # Return the replacement string, or +nil+ to drop the field entirely.
+    #
+    #   config.before_send_text = ->(text) { MyScrubber.clean(text) }
+    #
+    # **Fails closed.** If the callable raises, the field is **dropped** rather
+    # than sent — a broken filter must never leak the value it was installed to
+    # catch. The failure is logged at +warn+ and reported through {#on_error}
+    # every time it happens, not once, because a persistently broken filter
+    # silently degrades every auction and should stay noisy.
+    #
+    # Unset (the default) means values are sent unchanged.
+    #
+    # @return [#call, nil]
+    attr_accessor :before_send_text
+
     # @return [Logger, nil] logger for diagnostics; all logging redacts
     #   +secret_key+ and +asset_token+
     attr_accessor :logger

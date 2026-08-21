@@ -351,16 +351,47 @@ pure-Ruby with a light footprint (faraday, railties), and that gem ships a C
 extension. Opt in from your own app if you want it:
 
 ```ruby
-# Egress: redact before handing anything to the client.
-Wavebird.client.create_placement(job_type: "chat", session_id: session_id,
-                                 topic: DataRedactor.redact(topic))
-
-# Logs: redact_deep walks nested values and returns a copy, so the redacted
-# structure is what gets logged while the original still goes to wavebird.
 Wavebird.configure do |c|
+  # Egress: filter caller-supplied free text on its way out. Any callable works
+  # -- data_redactor is one option, your own scrubber is another.
+  c.before_send_text = ->(text) { DataRedactor.redact(text) }
+
+  # Logs: redact_deep walks nested values and returns a copy, so the redacted
+  # structure is what gets logged while the original still goes to wavebird.
   c.logger = RedactingLogger.new(Rails.logger) { |payload| DataRedactor.redact_deep(payload) }
 end
 ```
+
+### `before_send_text` — the egress hook
+
+`config.before_send_text` receives **one caller-supplied free-text value at a
+time** and returns its replacement, or `nil` to drop the field. Today that means
+`topic:`; any future field carrying caller text goes through the same seam.
+
+It is deliberately **not** handed the whole request body. A hook given the body
+could rewrite `client_id`, drop the `consent` object, or inject the response-only
+fields this gem refuses to send. Handed one string, it structurally cannot — so
+the hook is free to be arbitrary host code without widening what the gem may
+send.
+
+**It fails closed.** If your callable raises, the field is **dropped**, not sent:
+a broken filter must never leak the value it was installed to catch. The failure
+is reported through `on_error` and logged at `warn` *every time*, not once —
+because a persistently broken filter degrades every auction silently (the topic
+vanishes, fills get worse, nothing errors), so the noise is the mitigation. Unset
+is the default and changes nothing.
+
+**Why a config hook and not "redact at the call site".** Redacting at the call
+site works when *you* are the caller. It does not work for the engine endpoint
+(`POST /wavebird/sponsor_slot`), where the caller is `SponsorSlotsController`
+inside this gem and you have no call site to redact at. Without this seam the
+only option there was monkey-patching. See `docs/DECISIONS.md` #028.
+
+Worth keeping in proportion: this is defence in depth and a compliance seam, not
+a plug for a known leak. **The client has no parameter that accepts user text at
+all** — `topic:` takes a coarse subject hint (#019), `slot_hint` carries layout
+numbers, and `overrides`/`consent` are server-configured. There is deliberately
+no way to send a prompt or a chat message.
 
 This extends the discipline already in the gem — `secret_key` and `asset_token`
 are masked in `inspect` and in every instrumentation payload — from known-secret

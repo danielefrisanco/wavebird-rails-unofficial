@@ -97,6 +97,15 @@ wavebird's canonical REST v1 API.
 
 #### Security
 
+- `config.before_send_text` — an egress hook for filtering caller-supplied free
+  text (today `topic:`) before it is sent, so a host can wire `data_redactor` or
+  their own scrubber without monkey-patching. It receives **one value at a time**,
+  never the request body, so it structurally cannot rewrite `client_id`, drop
+  `consent`, or inject fields the gem refuses to send. **Fails closed**: a raising
+  filter drops the field rather than sending the original, reported through
+  `on_error` and logged at `warn` every time. Unset by default. This is the only
+  way to filter the engine endpoint, whose caller is inside the gem (#028).
+
 - Async decision streams are **scoped to the session**, not to the slot position.
   A position-only stream is shared by every visitor rendering it, so one
   visitor's decision — including the `frame_url` that embeds their `asset_token`
