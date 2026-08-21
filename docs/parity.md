@@ -65,7 +65,7 @@ caller bug rather than a wavebird failure.
 |---|---|---|---|
 | `createJob(params)` | canonical `POST /v1/jobs` when params fit; legacy wrapper ingress otherwise | `#create_job` → canonical only | port (canonical only) |
 | — | `POST /v1/placements?wait_ms=` (job+first decision in one call; recommended by docs, not in SDK) | `#create_placement` | **add** — docs-recommended primary path; not a deviation, it's the API-first route |
-| `getDecision(slotId)` | WS → long-poll → short-poll ladder | `#decision(slot_id)` long-poll + short-poll, same budgets | adapt per #001 |
+| `getDecision(slotId)` | WS → long-poll → short-poll ladder | **`#await_decision(slot_id)`** is the equivalent — same ladder, same budgets. `#decision(slot_id)` is a *single* long-poll request, which upstream has no public equivalent of (its `pollDecisionOnce` is private) | adapt per #001 |
 | `reportGeneration(jobId, event, req)` | `POST /v1/jobs/{job_id}/generation/{event}`; events `started\|finished\|failed`; body `generation_id`, `model_id`, `usage_json`, `error` | `#report_generation` | **ported** (decision #002 approved) — event validated locally against the canonical enum before the request, since it forms the URL path |
 | `sendBeacon(beacon)` | canonical `POST /v1/beacons` (maps legacy `beacon_type`→canonical `event`, ms epoch→ISO8601); falls back to legacy wrapper path | `#record_beacon` canonical only, canonical field names (`event`, `occurred_at`) | port (canonical only) |
 | — | `POST /v1/consent` | `#record_consent` | add (docs §3.7) |
@@ -73,6 +73,29 @@ caller bug rather than a wavebird failure.
 | — | `GET /v1/projects/{client_id}/config` | `#project_config` | add (docs §3.8) |
 | `createDecisionWsTicket` + `getDecisionViaWebSocket` (private) | wrapper WS ticket + per-slot socket | not ported in v1 | #001 (approved; deferred todo) |
 | `sendLegacyBeacon` (private) | `/public/wrapper/v1/beacons` | not ported | legacy transport |
+
+**Three different beacon vocabularies, verified 2026-08-11.** Easy to mistake for
+a parity gap, so stated explicitly:
+
+| Set | Values | Route |
+|---|---|---|
+| `WRAPPER_BEACON_TYPES` (upstream) | `rendered`, `on_view`, `visible_started`, `visible_ended`, `heartbeat`, `play_started`, `play_completed`, `clicked` | legacy `/public/wrapper/v1/beacons` |
+| What upstream can emit canonically | `rendered`, `visible`, `heartbeat`, `play_started`, `play_completed`, `clicked` — via `mapSdkBeaconTypeToCanonicalEvent`, which returns `null` for `visible_ended` and anything unknown | canonical `/v1/beacons` |
+| `Client::BEACON_EVENTS` (ours) | the six above **plus `completed`** | canonical `/v1/beacons` |
+
+The hosted `render.js` uses the *first* set and posts to the legacy route
+(`contract_version: "csl_wrapper_beacon/v1"`), which is why its `on_view` and
+`visible_ended` are absent from ours and should stay absent — they have no
+canonical counterpart, and upstream maps `visible_ended` to `null` precisely
+because of that. So a host never needs them: the renderer beacons on its own, and
+`#record_beacon` is a documented escape hatch for the canonical route only.
+
+`completed` is the one value we accept that upstream cannot produce. It comes
+from the canonical enum in the build prompt (§3.6), not from the SDK — upstream's
+mapper only translates *from* its legacy set, so it could never emit a
+canonical-only event even if one exists. Unverifiable against the SDK by
+construction; accepting it is the tolerant choice, since rejecting a real
+canonical event would be the worse error.
 
 **Legacy-only request fields, not exposed by this client.** Upstream's
 `createV1JobRequest` treats several `JobRequest` fields as signals to *leave* the
