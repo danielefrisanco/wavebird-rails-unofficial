@@ -279,6 +279,15 @@ documentation drift once (parity.md, fixed 2026-08-11).
   > produced the missing `mode` in the generator.
   >
   > What it does *not* do: no CHANGELOG entry, no `docs/DECISIONS.md` entry.
+  >
+  > **Provenance, since it will not be obvious later:** this branch was written by
+  > Claude in the same sitting as the plan proposing it, before Daniele had agreed
+  > the item, and after he said "I didn't mean to fix it now". It is speculative
+  > work parked rather than reviewed work waiting. Treat the green suite as
+  > evidence the change is *self-consistent*, not that it is *wanted* — the author
+  > and the reviewer were the same party, which is the arrangement that let the
+  > generator ship without `mode` and the first version of
+  > `docs_turn_body_contract_spec` pass vacuously.
 
   After the rename the pair reads correctly and neither name collides with
   `getDecision`'s meaning:
