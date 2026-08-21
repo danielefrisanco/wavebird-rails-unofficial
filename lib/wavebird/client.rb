@@ -146,13 +146,21 @@ module Wavebird
       accepted_job(parsed_body(request(:post, "/v1/jobs", body: body)))
     end
 
-    # Polls a slot once — +GET /v1/decisions/{slot_id}?wait_ms=+.
+    # Polls a slot **once** — +GET /v1/decisions/{slot_id}?wait_ms=+, the
+    # canonical endpoint wrapped 1:1.
+    #
+    # This is *not* the equivalent of upstream's +getDecision+; {#await_decision}
+    # is. Upstream keeps its single-poll helper (+pollDecisionOnce+) private and
+    # exposes only the ladder, so a caller reaching for a same-named method here
+    # would silently get one request instead of the full budget. Hence the name:
+    # use this only when driving your own polling loop, {#await_decision}
+    # otherwise.
     #
     # @param slot_id [String]
     # @param wait_ms [Integer, nil] long-poll wait; defaults to
     #   +config.long_poll_wait_ms+; +0+ sends a plain short poll
     # @return [Types::Decision] pending, no-fill or fill
-    def decision(slot_id, wait_ms: nil)
+    def poll_decision(slot_id, wait_ms: nil)
       wait = clamp_wait_ms(wait_ms.nil? ? config.long_poll_wait_ms : wait_ms)
       response = request(:get, "/v1/decisions/#{encode(slot_id)}",
                          query: wait.positive? ? { wait_ms: wait } : nil,
@@ -289,7 +297,7 @@ module Wavebird
     # failed polls (reported, then swallowed — upstream behavior) both
     # continue the ladder.
     def poll_quietly(slot_id, wait_ms)
-      found = decision(slot_id, wait_ms: wait_ms)
+      found = poll_decision(slot_id, wait_ms: wait_ms)
       found.ready? ? found : nil
     rescue Error => e
       report_swallowed_error(e)
