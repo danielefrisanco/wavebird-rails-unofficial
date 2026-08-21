@@ -574,16 +574,22 @@ Both raised by Daniele on 2026-08-07. Neither is a parity gap to be closed on
 sight: each reverses an approved decision, so each needs its own decision entry
 before any code moves.
 
-- [ ] **Rethink the WebSocket transport.** Upstream's decision transport is a
-  per-slot WebSocket (`createDecisionWsTicket` → open → one message → close),
-  with polling as the *fallback*. We ship polling only, plus an ActiveJob +
-  Turbo Stream async mode (#001, #015, #016). Worth revisiting because the
-  upstream shape is scoped to one caller by construction — that property is what
-  #015 had to rebuild by hand after the shared-channel leak. Open questions when
-  we pick it up: does ActionCable earn its place next to Turbo Streams, or does
-  it duplicate it; who owns the socket lifecycle in a Rails request cycle; and
-  does the ticket endpoint exist on the canonical route or only the legacy
-  wrapper (unverified — check before designing).
+- **~~Rethink the WebSocket transport.~~ Closed 2026-08-21 — see decision #024.**
+  The open question this bullet ended on was *"does the ticket endpoint exist on
+  the canonical route or only the legacy wrapper (unverified — check before
+  designing)"*. It was checked, and the answer settles the item:
+  `createDecisionWsTicket` posts to `POST
+  /public/wrapper/v1/slots/{slot_id}/decision-ticket` (`wavebird-client.ts:875`),
+  a **legacy wrapper route with no canonical equivalent**. So adopting the socket
+  means adopting the legacy transport this gem excluded as its founding decision
+  — a much larger question than the transport, and not one anything in the
+  current design is waiting on. The other two open questions (does ActionCable
+  earn its place; who owns the socket lifecycle) are moot: they only arise after
+  the boundary question is answered the other way. Not deprecated, and neither is
+  the wrapper route — see #024 for what upstream actually deprecates. **Nothing
+  to design here.** If it is ever revisited, the question is "do we adopt the
+  legacy wrapper transport?", covering the socket, `callback` delivery (#025) and
+  the richer consent flags in one decision.
 - [ ] **Consider a React surface.** Today: hidden `<section>` + Stimulus + the
   hosted `render.js` (#006, #008, #009). Upstream ships React bindings, but its
   own `mount` DOM builders are deprecated, so "port what upstream has" is not

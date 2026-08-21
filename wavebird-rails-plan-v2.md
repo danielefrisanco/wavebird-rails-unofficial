@@ -25,13 +25,13 @@ the suite passing says the change is consistent, not that it is right.
 
 | | Item | Verdict | Why |
 |---|---|---|---|
-| **A** | WebSocket transport | ❌ **No** | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
-| **B** | `callback` delivery | ❌ **No** | `callback_url` forces the legacy ingress body. Same boundary, same answer |
+| **A** | WebSocket transport | ❌ **No** — ✔ recorded #024 | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
+| **B** | `callback` delivery | ❌ **No** — ✔ recorded #025 | `callback_url` forces the legacy ingress body. Same boundary, same answer |
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
-| **G** | Test the examples | ✅ **Yes, first** | First thing a new user runs; least tested code in the repo |
+| **G** | Test the examples | ✅ **Yes, first** — ✔ G1–G2 done | First thing a new user runs; least tested code in the repo |
 
 **A and B are one question, not two features.** Both are unreachable for the same
 structural reason, so the real decision is *"do we adopt the legacy wrapper
@@ -75,7 +75,7 @@ the wrong premise.
 
 ---
 
-## ❌ A. WebSocket decision transport — **DO NOT BUILD.** Record only
+## ❌ A. WebSocket decision transport — **DO NOT BUILD.** ✔ Recorded 2026-08-21
 
 **Verified 2026-08-11.** `createDecisionWsTicket` requests
 
@@ -104,14 +104,26 @@ session-scoped Turbo Stream now has it, but by convention rather than by
 construction, which is a weaker guarantee. If that ever bites again, the fix is
 to tighten our own scoping, not to import the wrapper transport.
 
-- [ ] **Record as a closed question** in `docs/DECISIONS.md`: the WS transport is
-  wrapper-only, therefore out of scope for a canonical-only client, and #001
-  stands unchanged for a reason stronger than "we preferred polling".
-- [ ] Amend the "Future — raised, not scheduled" entry in
+> **DONE 2026-08-21 — decision #024.** All three items below are complete. The
+> question is closed, not merely unscheduled. Nothing further to do on A.
+
+- [x] **Record as a closed question** in `docs/DECISIONS.md` (**#024**):
+  the WS transport is wrapper-only, therefore out of scope for a canonical-only
+  client, and #001 stands unchanged for a reason stronger than "we preferred
+  polling". Say explicitly that it is **not deprecated** — it is on the other side
+  of the canonical/legacy line, which is a different thing.
+- [x] **Update #001 itself.** Its closing line still read *"**Deferred todo:**
+  implement the Rails↔wavebird WS transport behind the same interface in a later
+  version"* — a promise we now know cannot be kept on the canonical route. Append
+  a pointer (`→ the deferred todo is closed by #024`) so a reader of the old entry
+  sees it. Appending rather than rewriting: the log is append-only by convention
+  (#016 supersedes #015 the same way), and erasing what we believed in July hides
+  that the question was genuinely reopened by reading the source.
+- [x] Amend the "Future — raised, not scheduled" entry in
   [wavebird-rails-plan.md](wavebird-rails-plan.md), which still frames this as an
   open design question with unknowns. It is not; the unknown is resolved.
 
-## ❌ B. `callback` delivery mode — **DO NOT BUILD.** Record only, and supersede #004
+## ❌ B. `callback` delivery mode — **DO NOT BUILD.** ✔ Recorded 2026-08-21, #004 superseded
 
 **Verified 2026-08-11.** `callback_url` is an explicit *condition* of
 `canUseCanonicalRequest` (`wavebird-client.ts:308–317`):
@@ -129,12 +141,26 @@ deprecated** — see the correction at the top — and it was not skipped for be
 deprecated. It is unreachable for exactly the same structural reason as the
 WebSocket: it lives on the legacy transport.
 
-- [ ] **Supersede decision #004.** It reads as a deferred design task ("design the
-  client so it can slot in post-v1 without breaking changes"), which implies the
-  work is possible on our current route. It is not, and leaving #004 as written
-  invites someone to attempt it. Record the finding and close it.
-- [ ] Add `callback_url` to the "legacy-only request fields" paragraph in
-  `docs/parity.md`, which lists the other five triggers but not this one.
+> **DONE 2026-08-21 — decision #025.** #004 is superseded and carries a pointer
+> to it. Nothing further to do on B.
+
+- [x] **Supersede decision #004** with a new entry (**#025**). #004
+  reads as a deferred design task ("design the client so it can slot in post-v1
+  without breaking changes"), which implies the work is possible on our current
+  route. It is not, and leaving #004 as written invites someone to attempt it.
+  Record the finding, and say that `callback` is **not deprecated** — the premise
+  this plan was written against was wrong, and #025 is where that gets corrected
+  permanently.
+- [x] **Update #004 itself**, same treatment as #001: append `→ superseded by
+  #025`, do not rewrite. Its "later todo" status is the single most misleading
+  line in the log right now, because it reads like scheduling rather than
+  impossibility.
+**No third item.** An earlier draft of this plan listed "add `callback_url` to the
+legacy-only request fields paragraph in `docs/parity.md`, which lists the other
+five triggers but not this one". That was stale on arrival: `callback_url` has
+been in that list since `61c3352` (2026-08-05, the #019 work), six days before
+this plan was written. Verified 2026-08-21 at `docs/parity.md:102`. Nothing to do
+— recorded here only so the item is not resurrected from an old copy.
 
 **If callback delivery is ever genuinely wanted**, the question to ask is not
 "port callback mode" but "do we adopt the legacy wrapper transport" — one
@@ -424,7 +450,7 @@ leak.
 **Reverses:** nothing. New surface beyond upstream — upstream has no equivalent —
 so it needs a decision entry as an addition.
 
-## ✅ G. Test the examples — **BUILD.** Highest value per effort
+## ✅ G. Test the examples — **BUILD.** ✔ G1–G2 done 2026-08-21; G3–G4 open
 
 **Today.** `spec/wavebird/examples_spec.rb` covers **only**
 `examples/chat_with_sponsored_slot/` — the non-runnable fragments. It checks they
@@ -437,12 +463,12 @@ new user runs, and they are the least tested code in the repo.
 
 **What a spec should assert**, cheapest first:
 
-1. **They parse** — `RubyVM::InstructionSequence.compile`, same as the fragments
-   spec already does. Catches the class of error that cost a debugging round
+1. ~~**They parse**~~ — **DONE.** `RubyVM::AbstractSyntaxTree.parse_file`, same
+   as the fragments spec. Catches the class of error that cost a debugging round
    during authoring.
-2. **The ERB templates compile** — the heredoc-quoting bug (`<%#{...}` parsing as
-   interpolation) produced a *valid Ruby file* with a broken template, so parsing
-   is not enough. Compile `TEMPLATE` with `ERB.new(...).src`.
+2. ~~**The ERB templates compile**~~ — **DONE, but not the way this plan said.**
+   See the correction below: `ERB.new(...).src` does not catch the bug it was
+   proposed for.
 3. **They boot and serve** — spawn on a free port, `GET /` expecting 200 with the
    slot markup, `POST /wavebird/sponsor_slot` expecting `{"fill": false}` with no
    key. This is the assertion that would have caught every bug found by hand.
@@ -462,16 +488,64 @@ suite. This is the highest value-per-effort item in this plan.
 
 ---
 
+### ✔ G1–G2 delivered 2026-08-21 — `spec/wavebird/runnable_examples_spec.rb`
+
+11 examples over both files. Gate green: 455 unit examples (was 444), 100% line +
+branch, 66 files RuboCop-clean, YARD 100%.
+
+> **Correction to item 2 above, found while building it.** `ERB.new(TEMPLATE).src`
+> **does not catch the heredoc-quoting bug**, so the check this plan prescribed
+> would have shipped a false sense of coverage.
+>
+> The historical bug turned `<%#{" "}comment %>` into `<% comment %>` — an *open
+> tag* whose body is English prose. Two things defeat the prescribed check.
+> First, Ruby constant-folds `#{" "}`, so the AST node stays a plain `STR` and
+> nothing about the literal looks dynamic. Second, prose like `This is a comment
+> about the slot` is *valid Ruby* (a chain of method calls), so `ERB`'s generated
+> source compiles cleanly and the broken template walks straight through.
+> Verified directly: that exact input compiles without raising.
+>
+> **What actually works, layered:**
+>
+> - **Assert the heredoc delimiter is quoted** — `TEMPLATE = <<~'ERB'`. The only
+>   check that names the real rule; everything else observes a consequence.
+> - **Count `<%#` in the raw heredoc body vs. in the evaluated `TEMPLATE`
+>   string** (taken from the AST, not by regex, so it is the string the
+>   interpreter would build). An eaten `#` changes the count. This is the check
+>   that is genuinely sensitive to the bug, and it survives someone
+>   reintroducing it with a different delimiter spelling.
+> - **Keep the ERB + generated-Ruby compile anyway.** It is blind to *this* bug
+>   but does catch an unclosed or malformed tag — the other way to ship a file
+>   that parses and a page that does not render.
+>
+> **Sensitivity was verified, not assumed.** Mutating `examples/chat_plain.rb`
+> to unquote the delimiter fails 1 example; adding the real `<%#{...}` shape on
+> top fails 3. Both mutations reverted. This step is deliberate: plan v2 already
+> records that the first version of `docs_turn_body_contract_spec` passed with
+> the code it guarded deleted, and a spec written from the same sitting as the
+> thing it tests earns no trust until it has been seen to fail.
+>
+> A guard example also asserts the `Dir.glob` matched exactly the two expected
+> files, so the whole spec cannot pass vacuously if `examples/` is renamed.
+
+---
+
 ## Suggested order
 
 Only the ✅ items are work. The ❌ items still need **recording** — closing a
 question is cheap and stops it being reopened from the wrong premise.
 
-1. **A + B record** ❌ — two decision entries, two doc edits, no code. First
-   because #004 currently reads as "possible, just deferred", which invites
-   someone to attempt something structurally impossible.
-2. **G (1–2)** ✅ — parse + ERB-compile specs. Minutes; catches the two bugs that
-   actually happened while writing the examples.
+1. ~~**A + B record**~~ ❌ — **DONE 2026-08-21.** Two new decision entries (**#024**, **#025**), a pointer
+   appended to each of **#001** and **#004**, and one edit to
+   [wavebird-rails-plan.md](wavebird-rails-plan.md)'s "Future" section. No code.
+   First because #001 and #004 currently read as "possible, just deferred", which
+   invites someone to attempt something structurally impossible. Five edits, four
+   files — the `docs/parity.md` item once listed here was already done. **Next up
+   is step 2.**
+2. ~~**G (1–2)**~~ ✅ — **DONE 2026-08-21**,
+   `spec/wavebird/runnable_examples_spec.rb`. Note the prescribed ERB-compile
+   check did not work and was replaced; see the correction under G. **Next up is
+   step 3, which needs Daniele's call on the method name first.**
 3. **E — the rename** ✅ — the only item that gets harder after publication.
    Branch `rename-poll-decision` (`4aff31a`) exists but is unreviewed.
 4. **G (3–4)** ✅ — boot-and-serve system specs for both examples.
