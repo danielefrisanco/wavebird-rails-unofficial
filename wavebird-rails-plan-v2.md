@@ -14,10 +14,25 @@ before the plan was agreed and left unmerged on purpose:
 
 | Branch | Item | State |
 |---|---|---|
-| `rename-poll-decision` (`4aff31a`) | **E** — the `decision` anomaly | Green, unreviewed, no CHANGELOG or decision entry |
+| `rename-poll-decision` (`4aff31a`) | **E** — the `decision` anomaly | ✔ **Resolved 2026-08-21.** Superseded — do not merge |
 
 A green branch is not an approved one. Read the diff before merging any of these;
 the suite passing says the change is consistent, not that it is right.
+
+**How that one actually resolved, since it is the worked example.** It was
+*rebased onto current `main` and then renamed*, not merged: Daniele chose
+`poll_decision_once` and the branch had `poll_decision`. It also lacked the
+CHANGELOG entry, the decision entry, the README framing and the
+`docs/parity-findings.md` annotations, all added on top. The branch is left in
+place as a record; `main` carries the finished work (#026, #027).
+
+One thing this plan got wrong is worth keeping, because the mistake is easy to
+repeat: it was claimed that merging the parked branch would *delete* item G,
+citing a file list from `git diff main..rename-poll-decision`. That is a
+**tip-to-tip** comparison — it reports everything `main` has and the branch lacks
+as a deletion. The commit itself touches six files, and neither a merge nor a
+rebase would have removed anything. Read `git show --stat <sha>` for what a
+commit does; `git diff a..b` answers a different question.
 
 ---
 
