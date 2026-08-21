@@ -18,8 +18,15 @@ RSpec.describe Wavebird do
     let(:gem_root) { File.expand_path("../..", __dir__) }
 
     # Interpolations of a sensitive value into a string: "#{...secret_key...}".
+    #
+    # `activation_token` is here for the same reason as the other three: it is a
+    # short-lived Bearer credential, and Types::BrowserActivation already
+    # declares it sensitive via `extra_sensitive_members`. That masks it in
+    # `inspect`; nothing was checking that no code path interpolates it into a
+    # log line or an error message. Found while auditing `#activate_browser`
+    # (plan v2 item E), not by a failure.
     let(:sensitive_interpolation) do
-      /\#\{[^}]*\b(?:secret_key|resolved_secret_key|asset_token)\b[^}]*\}/
+      /\#\{[^}]*\b(?:secret_key|resolved_secret_key|asset_token|activation_token)\b[^}]*\}/
     end
 
     # The only places a sensitive value may legitimately be interpolated, each

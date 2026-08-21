@@ -87,12 +87,12 @@ module Wavebird
     # Polls a slot once, never raising. On any {Wavebird::Error} the error is
     # reported and a pending {Types::Decision} is returned — upstream's
     # +pollDecisionOnce+ fallback, which lets a caller driving its own ladder
-    # keep polling. See {Client#decision}.
+    # keep polling. See {Client#poll_decision_once}; prefer {#await_decision} unless driving your own loop.
     #
     # @param slot_id [String]
     # @return [Types::Decision] a real decision, or a synthetic pending one
-    def decision(slot_id, **)
-      client.decision(slot_id, **)
+    def poll_decision_once(slot_id, **)
+      client.poll_decision_once(slot_id, **)
     rescue Error => e
       report(e)
       pending_decision(slot_id)

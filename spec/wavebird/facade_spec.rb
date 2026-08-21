@@ -187,26 +187,26 @@ RSpec.describe Wavebird::Facade do
     end
   end
 
-  describe "#decision" do
+  describe "#poll_decision_once" do
     it "returns the client's decision on success" do
       decision = Wavebird::Types::Decision.from_api("slot_id" => "slot_1", "status" => "ready", "fill" => false)
-      allow(client).to receive(:decision).and_return(decision)
+      allow(client).to receive(:poll_decision_once).and_return(decision)
 
-      expect(facade.decision("slot_1")).to be(decision)
+      expect(facade.poll_decision_once("slot_1")).to be(decision)
     end
 
     it "forwards keyword arguments to the client" do
-      allow(client).to receive(:decision).and_return(nil)
+      allow(client).to receive(:poll_decision_once).and_return(nil)
 
-      facade.decision("slot_1", wait_ms: 0)
+      facade.poll_decision_once("slot_1", wait_ms: 0)
 
-      expect(client).to have_received(:decision).with("slot_1", wait_ms: 0)
+      expect(client).to have_received(:poll_decision_once).with("slot_1", wait_ms: 0)
     end
 
     it "swallows a Wavebird::Error and returns a pending decision for the slot" do
-      allow(client).to receive(:decision).and_raise(Wavebird::ConnectionError, "down")
+      allow(client).to receive(:poll_decision_once).and_raise(Wavebird::ConnectionError, "down")
 
-      result = facade.decision("slot_1")
+      result = facade.poll_decision_once("slot_1")
 
       expect(result).to be_pending
       expect(result.slot_id).to eq("slot_1")

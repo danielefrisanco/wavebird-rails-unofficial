@@ -74,7 +74,8 @@ reported through onError.` (`wavebird-client.ts:1008`), and its body is one
 **Gem.** `Facade` wraps `create_placement`, `create_job`, `await_decision`,
 `record_beacon` (`facade.rb:44`–`facade.rb:87`). `report_generation`,
 `record_consent`, `activate_browser`, `project_config` and the single-poll
-`decision` exist only on the raising `Client` — there is no non-raising way to
+`decision` (renamed `poll_decision_once` on 2026-08-21, #026) exist only on the
+raising `Client` — there is no non-raising way to
 call them, and `Facade` has no `method_missing` delegation.
 
 **Impact.** `report_generation` is the one upstream expects to be called inside
@@ -85,7 +86,8 @@ intentional; `docs/parity.md` never flags it as a divergence from upstream.
 
 **Resolved — option (a).** All five are on `Facade`: `report_generation` → `false`
 on failure, `record_consent` / `activate_browser` / `project_config` → `nil`,
-`decision` → pending decision. `ArgumentError` still propagates at both layers,
+`decision` (now `poll_decision_once`) → pending decision. `ArgumentError` still
+propagates at both layers,
 since a bad enum is a caller bug (upstream rejects it at compile time).
 
 ### F2 — HTTP 429 on job creation is an error here, a value upstream — **fixed**
@@ -129,7 +131,8 @@ the slot), so this is mostly a contract question: a caller that distinguishes
 also a doc inconsistency: `errors.rb:46` states the facade "converts it back to
 a pending outcome", which the code does not do.
 
-**Resolved — option (a).** `Facade#await_decision` and `Facade#decision` return a
+**Resolved — option (a).** `Facade#await_decision` and `Facade#decision` (now
+`poll_decision_once`) return a
 pending decision, matching `fallbackDecision`. Rendering is unchanged: pending is
 not a fill, so `SlotPayload` still answers `{fill: false}` and the slot hides.
 The `errors.rb` comment now describes exactly this.
