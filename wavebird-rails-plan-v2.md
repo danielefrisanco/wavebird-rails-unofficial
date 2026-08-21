@@ -31,7 +31,7 @@ the suite passing says the change is consistent, not that it is right.
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ❌ leave the other nine | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
-| **G** | Test the examples | ✅ **Yes, first** — ✔ G1–G2 done | First thing a new user runs; least tested code in the repo |
+| **G** | Test the examples | ✅ **Yes, first** — ✔ **COMPLETE** | First thing a new user runs; least tested code in the repo |
 
 **A and B are one question, not two features.** Both are unreachable for the same
 structural reason, so the real decision is *"do we adopt the legacy wrapper
@@ -450,7 +450,7 @@ leak.
 **Reverses:** nothing. New surface beyond upstream — upstream has no equivalent —
 so it needs a decision entry as an addition.
 
-## ✅ G. Test the examples — **BUILD.** ✔ G1–G2 done 2026-08-21; G3–G4 open
+## ✅ G. Test the examples — **BUILD.** ✔ COMPLETE 2026-08-21
 
 **Today.** `spec/wavebird/examples_spec.rb` covers **only**
 `examples/chat_with_sponsored_slot/` — the non-runnable fragments. It checks they
@@ -469,13 +469,13 @@ new user runs, and they are the least tested code in the repo.
 2. ~~**The ERB templates compile**~~ — **DONE, but not the way this plan said.**
    See the correction below: `ERB.new(...).src` does not catch the bug it was
    proposed for.
-3. **They boot and serve** — spawn on a free port, `GET /` expecting 200 with the
-   slot markup, `POST /wavebird/sponsor_slot` expecting `{"fill": false}` with no
-   key. This is the assertion that would have caught every bug found by hand.
-   Slow (~20s each), so it belongs with the system specs, not the unit suite.
-4. **The Hotwire one emits a session-scoped stream** — `data-wavebird-mode-value`
-   present and a `turbo-cable-stream-source` whose name is not position-only.
-   That is #015's property, currently proven only by a hand-run curl.
+3. ~~**They boot and serve**~~ — **DONE.** Spawn on a free port, `GET /`
+   expecting 200 with the slot markup, `POST /wavebird/sponsor_slot` expecting
+   `{"fill": false}` with no key. Faster than estimated: ~6 s for all six
+   examples, not ~20 s each.
+4. ~~**The Hotwire one emits a session-scoped stream**~~ — **DONE**, and stronger
+   than proposed: the signed stream name is base64-decoded and asserted to carry
+   the `sess_` token, plus two visitors are asserted to get *different* names.
 
 **Watch out for:** the examples load the gem via `$LOAD_PATH.unshift`, and the
 system suite already sets `WAVEBIRD_SYSTEM_SPECS`/`WAVEBIRD_SKIP_COVERAGE_GATE`
@@ -485,6 +485,41 @@ must shell out to a subprocess, not `require` it.
 **Recommendation:** do 1 and 2 in the unit suite immediately — they are minutes
 of work and catch the two bugs that actually happened. Do 3 and 4 in the system
 suite. This is the highest value-per-effort item in this plan.
+
+---
+
+### ✔ G3–G4 delivered 2026-08-21 — `spec/system/runnable_examples_boot_spec.rb`
+
+6 examples, ~6 s. System suite is now 24 examples (was 18). No Capybara and no
+`spec/dummy`: the file deliberately does **not** require `support/system_tests`,
+so nothing here needs a browser. It lives in `spec/system` only because that
+process has no Rails app of its own to collide with — each example is booted as
+a **subprocess**, since the examples define their own `Rails::Application`.
+
+**Runs safely with no credentials, and cannot borrow yours.** The subprocess env
+sets `WAVEBIRD_SECRET_KEY=""` and `WAVEBIRD_CLIENT_ID=""` rather than leaving
+them unset, which also stops the example's optional `Dotenv.load` from supplying
+a real sandbox key from a developer's `.env.test` — dotenv never overwrites an
+existing value. So the specs exercise the fail-silent path and never call
+wavebird.
+
+**G4 is the one that matters.** #015's leak was a position-only stream name
+shared by every visitor rendering that position. The spec decodes the signed
+name and asserts it contains `sess_`, then asserts two visitors get different
+names. Verified by mutation: reverting `SlotPayload.stream_name` to
+`"wavebird_slot_#{position}"` fails all three sub-assertions. Reverted.
+
+> **One bug worth recording, because it is a trap for any future spec here.**
+> The first version scoped its WebMock allowance with an `around` hook that
+> restored `WebMock.disable_net_connect!` in an `ensure`. All six examples passed
+> in isolation and **six Capybara examples failed when the suite ran together** —
+> the "restore" put back `spec_helper`'s stricter default rather than the
+> `allow_localhost: true` that `support/system_tests.rb` had established, cutting
+> off chromedriver at `127.0.0.1:9515`. Fixed by declaring the setting at file
+> level, the way `system_tests.rb` already does. Two files wanting the same
+> global setting should both declare it, not take turns restoring it. **This is
+> also the argument for running `rake`, not just the file you just wrote:** the
+> per-file run was green and the suite was not.
 
 ---
 
@@ -548,7 +583,8 @@ question is cheap and stops it being reopened from the wrong premise.
    step 3, which needs Daniele's call on the method name first.**
 3. **E — the rename** ✅ — the only item that gets harder after publication.
    Branch `rename-poll-decision` (`4aff31a`) exists but is unreviewed.
-4. **G (3–4)** ✅ — boot-and-serve system specs for both examples.
+4. ~~**G (3–4)**~~ ✅ — **DONE 2026-08-21**,
+   `spec/system/runnable_examples_boot_spec.rb`. **Item G is complete.**
 5. **F** ✅ — the redactor seam, failing closed.
 6. **D (1–2)** ✅ — React hook recipe + `examples/chat_react.rb`.
 7. **C** ❌ — only if a host asks.
