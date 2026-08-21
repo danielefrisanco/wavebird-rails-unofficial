@@ -404,8 +404,20 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   version outside the repo — 3.1.4 here — which both refuses the gem
   (`required_ruby_version >= 3.2`, correctly) and breaks a `GEM_HOME` populated
   under 3.4.10. `RBENV_VERSION=3.4.10` in front of the command.
-- [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
-  this** — it is user-invoked and billed.
+- [x] Run `/code-review` on the diff; fix findings — **partly done.**
+  `/code-review ultra` ran on `6b0e6ea..HEAD` (2026-08-11, 18 files): two
+  findings, both real, both fixed. Async silently downgraded to blocking on the
+  newly-promoted plain-JS path because the documented body omitted `mode`, and
+  the example taught an XSS-prone `insertAdjacentHTML` sink. Pinned by
+  `docs_turn_body_contract_spec`.
+
+  **Gap worth knowing:** `55563e0..6b0e6ea` has never had a passing ultra review —
+  the run covering it exceeded the 30-minute cloud limit and produced nothing.
+  That range holds the parity work (#018–#021), including the two riskiest changes
+  in the whole build: `Facade` gaining five new fail-silent methods, and
+  `SlotPayload` changing what crosses to the browser. Both are reasoned about at
+  length and spec-covered, and neither has had a second pair of eyes. Re-run it
+  in smaller slices if it matters before publishing.
 - [x] Run `/security-review`: key handling, log redaction, no PII pathways,
   no secret in any JSON/HTML output (acceptance §5 has an explicit test).
   Run 2026-08-11 over `55563e0..HEAD` (35 files). Key handling, redaction and the
