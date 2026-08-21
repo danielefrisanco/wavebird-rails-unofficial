@@ -29,7 +29,7 @@ the suite passing says the change is consistent, not that it is right.
 | **B** | `callback` delivery | ❌ **No** — ✔ recorded #025 | `callback_url` forces the legacy ingress body. Same boundary, same answer |
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
-| **E** | `decision` rename | ✅ **Yes** — ✔ **DONE** (#026) | The one real anomaly. Free until publication, breaking after |
+| **E** | `decision` rename | ✅ **Yes** — ✔ **COMPLETE** (#026, #027) | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
 | **G** | Test the examples | ✅ **Yes, first** — ✔ **COMPLETE** | First thing a new user runs; least tested code in the repo |
 
@@ -251,7 +251,7 @@ spec exists because this precise field went missing once already.
 
 ---
 
-## ✅ E. Surface size — ✔ **RENAME DONE 2026-08-21** (#026). One item left
+## ✅ E. Surface size — ✔ **COMPLETE 2026-08-21** (#026, #027)
 
 **Daniele: "I feel it a bit strange."** Reasonable. Here is the whole picture.
 
@@ -372,10 +372,19 @@ genuine anomaly is `decision`.
 surface" framing it is coherent: wrapping a documented endpoint the SDK skipped
 is expected, not a divergence.
 
-- [ ] Audit `activate_browser` for a plausible caller. It serves the Script Tag /
-  pure-browser path, which this gem does not otherwise support. If no host of
-  *this* gem would call it, it is surface with no user — keep or drop on that
-  basis, not on parity.
+- [x] **Audit `activate_browser` for a plausible caller.** ✔ **Done — kept**
+  (#027). Daniele: "keep it if it is not a security issue." It is not: no secret
+  key on the wire (`auth: false`), unreachable from a page (the engine draws one
+  route), publishable key is public by construction, and the returned token is
+  masked in `inspect` — verified, not assumed. The audit did turn up one real
+  gap and closed it: `leak_audit_spec` covered `secret_key` and `asset_token`
+  but **not `activation_token`**, so `inspect` was guarded and log lines were
+  not. Now covered, and verified by planting a leak.
+  > *Original wording:* "Audit `activate_browser` for a plausible caller. It
+  > serves the Script Tag / pure-browser path, which this gem does not otherwise
+  > support. If no host of *this* gem would call it, it is surface with no user
+  > — keep or drop on that basis, not on parity." The framing held up; the answer
+  > came out "keep".
 - [x] Put the framing in the **README's** API section. ✔ Done — a blockquote
   above the `Wavebird::Client` table, answering "why nine methods when the SDK
   has four" where a reader actually meets the surface. It currently lives only in
@@ -598,8 +607,8 @@ question is cheap and stops it being reopened from the wrong premise.
    check did not work and was replaced; see the correction under G. **Next up is
    step 3, which needs Daniele's call on the method name first.**
 3. ~~**E — the rename**~~ ✅ — **DONE 2026-08-21** as `poll_decision_once`
-   (#026). **One item in section E is still open: the `activate_browser` audit**,
-   which needs Daniele's keep-or-drop call.
+   (#026). The `activate_browser` audit is also done — **kept** (#027), and it
+   closed a real gap in the leak audit. **Item E is complete.**
 4. ~~**G (3–4)**~~ ✅ — **DONE 2026-08-21**,
    `spec/system/runnable_examples_boot_spec.rb`. **Item G is complete.**
 5. **F** ✅ — the redactor seam, failing closed.
