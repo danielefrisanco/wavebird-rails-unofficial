@@ -9,6 +9,16 @@ is justified; four are work with a shape already visible; one is a correction.
 Every item that reverses an approved decision needs its own `docs/DECISIONS.md`
 entry **before** implementation — WAY_OF_WORK rule 4. Those are flagged.
 
+**Parked branches.** One item has speculative work already on a branch, written
+before the plan was agreed and left unmerged on purpose:
+
+| Branch | Item | State |
+|---|---|---|
+| `rename-poll-decision` (`4aff31a`) | **E** — the `decision` anomaly | Green, unreviewed, no CHANGELOG or decision entry |
+
+A green branch is not an approved one. Read the diff before merging any of these;
+the suite passing says the change is consistent, not that it is right.
+
 ---
 
 ## ⚠️ Correction first: `callback` mode is not deprecated
@@ -239,6 +249,16 @@ documentation drift once (parity.md, fixed 2026-08-11).
   Small and contained: two definitions, one internal call site in the ladder, and
   the specs. Free right now — nothing is published — and not free later.
 
+  > **A branch already exists: `rename-poll-decision` (`4aff31a`).** Written
+  > 2026-08-11 and **not reviewed** — it is parked so the work is not lost, not
+  > because it is ready. Suite is green on it (444 examples, 100% line + branch,
+  > RuboCop clean, YARD 100%), but **do not merge it without settling the open
+  > questions below**, and re-read the diff first: it was written in the same
+  > sitting as the plan that proposes it, which is exactly the circumstance that
+  > produced the missing `mode` in the generator.
+  >
+  > What it does *not* do: no CHANGELOG entry, no `docs/DECISIONS.md` entry.
+
   After the rename the pair reads correctly and neither name collides with
   `getDecision`'s meaning:
 
@@ -256,6 +276,15 @@ documentation drift once (parity.md, fixed 2026-08-11).
   and point at `await_decision`. The comment is the part that stops the mistake
   recurring; the rename only stops it happening silently.
 - [ ] Decision entry — it is a public API change, even pre-publication.
+
+**Open before that branch can merge:**
+
+- [ ] **The name.** `poll_decision` is the branch's choice. `decision_once` and
+  `poll_decision_once` both say "one" more loudly; `poll_decision` reads better
+  next to `await_decision`. Pick deliberately — this is the last cheap moment.
+- [ ] **Whether it stays public at all.** Keeping it is the recommendation above,
+  but it is a real question and the branch assumes the answer.
+- [ ] **CHANGELOG.** Untouched on the branch.
 - **`activate_browser`** — for the Script Tag / pure-browser path, which this gem
   does not otherwise serve. Is any host of *this gem* going to call it? If not,
   it is surface with no user.
@@ -422,3 +451,35 @@ and should go early to stop the wrong framing spreading.
 harder afterwards, since renaming a published method is a breaking change rather
 than an edit. If the choice is between shipping and this plan, ship — but do 3
 first.
+
+---
+
+## How to work this plan
+
+**Answer before you build.** Two items (A, B) dissolved entirely once the source
+was actually read, and both had plausible-sounding designs sketched against them
+first. Item C's real obstacle is thread safety in a long-lived Rails singleton,
+which is invisible until you look at where the client lives. The pattern holds:
+the expensive part of this codebase has consistently been the question, not the
+code.
+
+**Deviations need a decision entry first, not after.** WAY_OF_WORK rule 4, and
+`docs/DECISIONS.md` is why a reader can tell #021's deliberate looseness from an
+oversight. Items D3, F and E all add or change public surface.
+
+**Verify against `upstream/wavebird/src/`, never against memory or the build
+prompt.** Every finding in this plan came from reading the source; two of them
+contradicted what the docs in this repo said. Where the source cannot answer —
+`completed` in the beacon enum, whether wavebird validates `click_url` — record
+that it cannot, rather than picking the comfortable reading.
+
+**Run the example, not just the suite.** #017 survived 369 unit and 18 system
+specs and died in ninety seconds against a real browser. Item G exists because
+the two runnable examples are still in that gap: verified by hand once, by
+nothing repeatable.
+
+**Definition of done, per item:** gate green (`bundle exec rake` exits 0, 100%
+line + branch, RuboCop clean, YARD 100%), docs updated in every place the fact
+appears — not just the nearest one — and a decision entry where the surface
+changed. The `mode` field went missing from the generator because "every place"
+was read as "the three files I was already editing".
