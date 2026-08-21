@@ -2,12 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+**Versions track the upstream SDK this gem ports, not an independent cadence.**
+`0.1.5` here implements the contract of wavebird TypeScript SDK `0.1.5`; it does
+not mean five patch releases of this gem. That is a deliberate trade: it gives up
+semantic versioning of our own changes in exchange for making the answer to
+"which SDK does this implement?" obvious from the version alone.
 
 ## [Unreleased]
 
-## [0.1.0] - unreleased
+## [0.1.5] - unreleased
 
 First release: a Ruby/Rails port of the public
 [wavebird TypeScript SDK](https://github.com/wavebird-ai/wavebird), targeting
