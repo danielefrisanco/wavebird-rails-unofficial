@@ -383,11 +383,27 @@ the system specs run as their own process (`rake spec:system`, excluded from bar
   the repo, rbenv falls back to the global version — 3.1.4 here — and the gemspec
   correctly refuses (`requires Ruby version >= 3.2`). `rails new` then writes
   *its* Ruby into the app, so check `ruby -v` after `cd`, not only before.
-- [ ] `gem install pkg/*.gem` — **still open, and distinct from the above.** The
-  smoke test used `path:`, which reads the working tree, so `spec.files` was never
-  on trial. Packaging is what decides whether `initializer.rb.tt` reaches a real
-  user; if it does not, the generator crashes on a fresh install. Do this before
-  publishing.
+- [x] `gem install` packaging test — **done 2026-08-11.** Distinct from the
+  smoke test above, which used `path:` and so read the working tree, leaving
+  `spec.files` untested. Built the artifact, installed it into an isolated
+  `GEM_HOME` (nothing touched the real gem set), and confirmed
+  `lib/generators/wavebird/install/templates/initializer.rb.tt` is present in the
+  installed gem — the file the gemspec glob was widened for, and the one whose
+  absence would crash the generator for every real user.
+
+  Then ran the generator **from the installed gem**: route mounted, initializer
+  written with its full documented body (so the packaged `.tt` is readable at its
+  installed path, not merely present), `ApplicationController` wired, and the
+  printed snippet carrying the `mode` line. Re-ran it and it skipped cleanly.
+
+  31 files packaged, no spec files, `LICENSE.txt`/`README.md`/`INSTALL.md` and
+  both runnable examples included. Runtime deps resolve to faraday + railties
+  only.
+
+  Repeat note: run it under the right Ruby. `rbenv` falls back to the global
+  version outside the repo — 3.1.4 here — which both refuses the gem
+  (`required_ruby_version >= 3.2`, correctly) and breaks a `GEM_HOME` populated
+  under 3.4.10. `RBENV_VERSION=3.4.10` in front of the command.
 - [ ] Run `/code-review` on the full diff; fix findings. **Daniele must trigger
   this** — it is user-invoked and billed.
 - [x] Run `/security-review`: key handling, log redaction, no PII pathways,
