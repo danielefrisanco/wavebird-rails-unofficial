@@ -109,7 +109,7 @@ module Wavebird
                          topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       wait = clamp_wait_ms(wait_ms.nil? ? config.long_poll_wait_ms : wait_ms)
       body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
-                     slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
+                     slots_requested: slots_requested, prompt: prompt_for(topic),
                      slot_hint: slot_hint || config.default_slot_hint,
                      overrides: merged_overrides(overrides, publisher), consent: consent)
       response = request(:post, "/v1/placements", body: body, query: { wait_ms: wait },
@@ -140,7 +140,7 @@ module Wavebird
     def create_job(job_type:, session_id: nil, locale: nil, slots_requested: 1,
                    topic: nil, slot_hint: nil, overrides: nil, publisher: nil, consent: nil)
       body = compact(client_id: require_client_id, session_id: session_id, job_type: job_type, locale: locale,
-                     slots_requested: slots_requested, prompt: topic.nil? ? nil : { topic: topic },
+                     slots_requested: slots_requested, prompt: prompt_for(topic),
                      slot_hint: slot_hint || config.default_slot_hint,
                      overrides: job_overrides(overrides, publisher, consent))
       accepted_job(parsed_body(request(:post, "/v1/jobs", body: body)))
@@ -311,6 +311,33 @@ module Wavebird
 
     def sleep_ms(milliseconds)
       sleep(milliseconds / 1000.0)
+    end
+
+    # Builds the +prompt+ object, passing +topic+ through
+    # +config.before_send_text+ on the way. Returns nil when there is nothing to
+    # send, so +compact+ drops the key entirely rather than sending an empty
+    # object.
+    def prompt_for(topic)
+      return nil if topic.nil?
+
+      text = filter_outbound_text(topic)
+      text.nil? ? nil : { topic: text }
+    end
+
+    # Applies +config.before_send_text+ to one caller-supplied value.
+    #
+    # Fails **closed**: a raising filter drops the value instead of sending it,
+    # because a broken filter must never leak the text it was installed to
+    # catch. Reported every time rather than once — a persistently broken filter
+    # degrades every auction silently, so the noise is the point.
+    def filter_outbound_text(value)
+      hook = config.before_send_text
+      return value if hook.nil?
+
+      hook.call(value)
+    rescue StandardError => e
+      report_swallowed_error(e)
+      nil
     end
 
     def report_swallowed_error(error)

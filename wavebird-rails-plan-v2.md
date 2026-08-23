@@ -45,7 +45,7 @@ commit does; `git diff a..b` answers a different question.
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
 | **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ✔ **COMPLETE** (#026, #027) | The one real anomaly. Free until publication, breaking after |
-| **F** | Redactor seam | ✅ **Yes** | The only way a host can filter the engine endpoint without monkey-patching |
+| **F** | Redactor seam | ✅ **Yes** — ✔ **DONE** (#028) | The only way a host can filter the engine endpoint without monkey-patching |
 | **G** | Test the examples | ✅ **Yes, first** — ✔ **COMPLETE** | First thing a new user runs; least tested code in the repo |
 
 **A and B are one question, not two features.** Both are unreachable for the same
@@ -408,7 +408,7 @@ is expected, not a divergence.
 
 ---
 
-## ✅ F. A redaction hook, without monkey-patching — **BUILD**
+## ✅ F. A redaction hook, without monkey-patching — ✔ **DONE 2026-08-21** (#028)
 
 **Daniele's shape (2026-08-11):** *"there should be a method we call passing just
 the data that can be modified. If the code sets that method — like data_redactor
@@ -438,8 +438,16 @@ server-configured. So this is defence in depth, and a compliance seam for hosts
 who must be able to say "nothing leaves unfiltered" — not a plug for a known
 leak.
 
-- [ ] **`config.redactor`** (name TBD — `sanitize_outbound`, `before_send` are
-  alternatives), a callable receiving **only the free-text values** the gem is
+> **DONE 2026-08-21 — decision #028.** Shipped as **`config.before_send_text`**.
+> Every item below is complete, plus specs and the README rewrite.
+>
+> **The name took two rounds.** `redactor` was rejected — *"this is not just
+> about dataredactor, anyone can hook their own thing there"*. Daniele's
+> `before_send` was then rejected in turn, because it promises the whole request
+> when the hook receives one string; `before_send_text` keeps the hook convention
+> and lets `text` carry the scope.
+
+- [x] **`config.before_send_text`** (was `config.redactor`; `sanitize_outbound` and `before_send` were the alternatives), a callable receiving **only the free-text values** the gem is
   about to send, returning replacements. In practice today that is `topic:`, and
   whatever future field accepts caller text.
 
@@ -452,7 +460,7 @@ leak.
   Unset (the default) means the value goes through untouched — no branch a host
   has to opt out of, no behaviour change for anyone who ignores it.
 
-- [ ] **Decide the granularity.** Two shapes, and it is worth choosing
+- [x] **Decide the granularity.** ✔ **Per-value**, as recommended. Two shapes, and it is worth choosing
   deliberately:
   - *Per-value* — `redactor.call(topic)` returns a `String`. Dead simple, and a
     host can wire `DataRedactor.redact` directly with no adapter. Cannot express
@@ -464,7 +472,7 @@ leak.
   `data_redactor`'s own signature, and field-awareness can be added later without
   breaking it.
 
-- [ ] **It must run inside the fail-silent boundary.** A redactor that raises
+- [x] **It must run inside the fail-silent boundary.** ✔ Fails closed; reported every time, verified by spec. A redactor that raises
   must not take down a chat turn — same posture as `on_error` observers, which
   are already swallowed.
 
@@ -476,15 +484,15 @@ leak.
   should stay noisy) and reporting through `on_error`, so the degradation is
   visible rather than merely survivable.
 
-- [ ] **It must run after defaults merge**, or a host cannot see what is actually
+- [x] **It must run after defaults merge**, or a host cannot see what is actually
   going out.
 
-- [ ] **Specs:** the redacted value is what reaches the wire (WebMock body
+- [x] **Specs:** ✔ 11 examples, all asserting the **wire body**. the redacted value is what reaches the wire (WebMock body
   assertion, not just a unit call); a raising redactor is swallowed and behaves
   per the decision above; an unset redactor changes nothing; the redactor is
   never handed credentials or `client_id`.
 
-- [ ] **Then rewrite the README recipe**, which currently only covers the direct
+- [x] **Then rewrite the README recipe** ✔ Done — new `before_send_text` section., which currently only covers the direct
   client and silently does not apply to the engine endpoint.
 
 **Reverses:** nothing. New surface beyond upstream — upstream has no equivalent —
@@ -626,7 +634,7 @@ question is cheap and stops it being reopened from the wrong premise.
    closed a real gap in the leak audit. **Item E is complete.**
 4. ~~**G (3–4)**~~ ✅ — **DONE 2026-08-21**,
    `spec/system/runnable_examples_boot_spec.rb`. **Item G is complete.**
-5. **F** ✅ — the redactor seam, failing closed.
+5. ~~**F**~~ ✅ — **DONE 2026-08-21**, `config.before_send_text` (#028).
 6. **D (1–2)** ✅ — React hook recipe + `examples/chat_react.rb`.
 7. **C** ❌ — only if a host asks.
 
