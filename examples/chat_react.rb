@@ -69,7 +69,11 @@ module Wavebird
 
     def record(error)
       @mutex ||= Mutex.new
-      @mutex.synchronize { @last = "#{error.class.name.split('::').last}: #{error.message}" }
+      # diagnostic_message, not message: wavebird's `message` is often generic
+      # ("check the request body schema") while reason_code names the actual
+      # cause. The panel exists to end guessing, so it shows everything sent.
+      described = error.respond_to?(:diagnostic_message) ? error.diagnostic_message : error.message
+      @mutex.synchronize { @last = "#{error.class.name.split('::').last}: #{described}" }
     end
 
     # Read-and-clear: each turn reports its own failure, never a stale one.
@@ -108,7 +112,8 @@ Wavebird.configure do |config|
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
   config.on_error = lambda { |error|
-    warn("[wavebird] swallowed: #{error.class}: #{error.message}")
+    warn("[wavebird] swallowed: #{error.class}: " \
+         "#{error.respond_to?(:diagnostic_message) ? error.diagnostic_message : error.message}")
     Wavebird::ExampleDiagnostics.record(error)
   }
 end
@@ -180,6 +185,7 @@ class ChatsController < ActionController::Base
   include Wavebird::SessionId
 
   def show
+    ensure_consent_recorded
     render inline: TEMPLATE, layout: false
   end
 
@@ -188,6 +194,24 @@ class ChatsController < ActionController::Base
   def reply
     sleep 2
     render json: { reply: "You said: #{params[:message]}" }
+  end
+
+  # wavebird's API tracks consent **per session**, separately from the
+  # browser-side gate in config.authoritative_consent. A project whose
+  # consent_mode requires it answers every placement with "Consent is not
+  # current" until a consent record exists for that session id.
+  #
+  # Recorded once per browser session here. A real app records it when the
+  # visitor actually answers your consent dialog, not on page load -- doing it
+  # unconditionally, as this example does, asserts a consent nobody gave and is
+  # only acceptable because there is no real visitor.
+  def ensure_consent_recorded
+    return if session[:wavebird_consent_recorded]
+
+    Wavebird.client.record_consent(decision: "personalized", source: "wavebird_dialog",
+                                   session_id: wavebird_session_id,
+                                   purposes: { semantic_targeting: true, prompt_shared: true })
+    session[:wavebird_consent_recorded] = true
   end
 
   # Example-only. See Wavebird::ExampleDiagnostics.
