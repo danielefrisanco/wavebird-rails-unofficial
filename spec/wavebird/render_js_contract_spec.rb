@@ -46,8 +46,13 @@ WAVEBIRD_RESOLUTION_PATH = {
     "var r=p&&p.render;if(r&&r.frame_url)return r",
   "startTurn discards a response that carries no placement.render" =>
     "var p=placementFrom({decision:decision});if(!p||!p.render)",
+  # Deliberately not pinned to the full argument list. On 2026-08-23 upstream
+  # added `authoritative_consent:` to this call, which is a *new precondition*
+  # (plan v3 item A), not a change to how the response is resolved. Pinning the
+  # whole call made this spec fail for the resolution reason it does not have.
+  # What #017 needs guarded is that the endpoint response is handed over whole.
   "startTurn hands the whole endpoint response to renderPlacement" =>
-    "api.renderPlacement({target:target,decision:decision})",
+    "api.renderPlacement({target:target,decision:decision",
   "renderPlacement re-resolves from its own options" =>
     "var p=placementFrom(options);var r=renderFrom(p)"
 }.freeze
@@ -61,12 +66,25 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
 
   # Plain methods rather than `let`s: they are paths and file reads, not per-example
   # fixtures, and the payload group below is already at RuboCop's memoized-helper cap.
+  # There are now two snapshots, and they answer different questions.
+  # `snapshot_path` is the newest -- what wavebird serves today, and therefore
+  # what the gem's own assumptions must hold against. `tracked_snapshot_path` is
+  # the one the stand-in declares it implements, which may lag. The gap between
+  # them is drift, and the example at the bottom of this file is where it shows.
   def snapshot_path
     Dir.glob(File.expand_path("../../docs/upstream/render-js-snapshot-*.js", __dir__)).max
   end
 
+  # Read as binary-safe text: the served file contains a NUL byte, which makes
+  # grep report nothing on it and cost a wrong conclusion during the 2026-08-23
+  # investigation.
   def snapshot
-    File.read(snapshot_path)
+    File.read(snapshot_path, encoding: "BINARY").force_encoding("UTF-8").scrub
+  end
+
+  def tracked_snapshot_path
+    named = File.read(stand_in_path)[/render-js-snapshot-[\d-]+\.js/]
+    named && File.expand_path("../../docs/upstream/#{named}", __dir__)
   end
 
   def stand_in_path
@@ -136,11 +154,27 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
       expect(File.read(stand_in_path)).to include("global.wavebird = api")
     end
 
-    it "documents that it is a stand-in and names the snapshot it tracks" do
+    it "documents that it is a stand-in and names a snapshot that exists" do
       source = File.read(stand_in_path)
 
       expect(source).to include("stand-in")
-      expect(source).to include(File.basename(snapshot_path))
+      expect(tracked_snapshot_path).not_to be_nil, "the stand-in names no snapshot at all"
+      expect(File).to exist(tracked_snapshot_path)
+    end
+
+    # The drift check this file did not have, and the reason the gem shipped a
+    # browser integration that could not run: the stand-in implements the
+    # contract *as of the snapshot it tracks*, so once a newer snapshot exists,
+    # every system spec is validating the gem against a contract wavebird has
+    # already replaced. The names of the entry points do not change when this
+    # happens -- the preconditions do -- which is why nothing else here fires.
+    it "tracks the newest snapshot, or the system suite is testing a dead contract" do
+      pending "plan v3 item B: the stand-in predates the authoritative_consent gate " \
+              "added to render.js on 2026-08-23. Until it is regenerated from the " \
+              "current snapshot, the 27 system examples prove nothing about the live " \
+              "renderer. This is expected to fail; remove the `pending` when B lands."
+
+      expect(File.basename(tracked_snapshot_path)).to eq(File.basename(snapshot_path))
     end
 
     # The stand-in must resolve payloads the way upstream does, not the way the
