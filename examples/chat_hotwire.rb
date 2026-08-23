@@ -46,12 +46,44 @@ rescue LoadError
   nil
 end
 
+# Records the last swallowed failure so the page can say *why* a slot is empty.
+#
+# The gem is fail-silent by design: a wavebird outage, a rejected request and an
+# honest empty auction all reach the browser as the same `{"fill": false}`, so
+# the ad path can never break a chat turn. That is right for production and
+# actively unhelpful in a demo -- it is what made "Consent is not current" look
+# like "no eligible campaign" until someone read the server log.
+#
+# This is **example-only scaffolding, not something the gem ships**: it hands the
+# browser an internal error string, which a real app should not do. `on_error` is
+# the supported seam; in production it goes to your error tracker, not to a page.
+module Wavebird
+  # Last-swallowed-error holder for the examples' status panel.
+  module ExampleDiagnostics
+    module_function
+
+    def record(error)
+      @mutex ||= Mutex.new
+      @mutex.synchronize { @last = "#{error.class.name.split('::').last}: #{error.message}" }
+    end
+
+    # Read-and-clear: each turn reports its own failure, never a stale one.
+    def take
+      @mutex ||= Mutex.new
+      @mutex.synchronize { @last.tap { @last = nil } }
+    end
+  end
+end
+
 Wavebird.configure do |config|
   config.secret_key = ENV.fetch("WAVEBIRD_SECRET_KEY", "")
   config.client_id  = ENV.fetch("WAVEBIRD_CLIENT_ID", "")
   config.logger     = Logger.new($stdout)
   config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
-  config.on_error = ->(error) { warn("[wavebird] swallowed: #{error.class}: #{error.message}") }
+  config.on_error = lambda { |error|
+    warn("[wavebird] swallowed: #{error.class}: #{error.message}")
+    Wavebird::ExampleDiagnostics.record(error)
+  }
 end
 
 # Reports which credentials are present without ever printing their values —
@@ -106,6 +138,9 @@ Rails.application.routes.draw do
   mount ActionCable.server => "/cable"
   root "chats#show"
   post "/messages", to: "chats#reply"
+  # Example-only: lets the status panel report why a slot is empty. Not part of
+  # the gem, and not something to copy into a real app.
+  get "/demo/diagnostics", to: "chats#diagnostics"
   # Serves the gem's Stimulus controller straight from its app/javascript, so
   # this file needs no asset pipeline. A real app pins it instead.
   get "/wavebird_controller.js", to: "chats#controller_js"
@@ -124,6 +159,11 @@ class ChatsController < ActionController::Base
   def reply
     sleep 2
     render json: { reply: "You said: #{params[:message]}" }
+  end
+
+  # Example-only. See Wavebird::ExampleDiagnostics.
+  def diagnostics
+    render json: { last_error: Wavebird::ExampleDiagnostics.take }
   end
 
   # The gem's shipped Stimulus controller, served as-is.
@@ -255,6 +295,25 @@ TEMPLATE = <<~'ERB'
 
         function report(lines) { status.innerHTML = lines.join("<br>"); }
 
+        // Example-only endpoint; see Wavebird::ExampleDiagnostics. A real app
+        // sends on_error to its error tracker, never to the browser.
+        async function slotReason() {
+          try {
+            const response = await fetch("/demo/diagnostics");
+            const { last_error: lastError } = await response.json();
+            if (lastError) {
+              const escaped = new Option(lastError).innerHTML;
+              return `<b>slot</b> hidden — wavebird <b>rejected the request</b>: ${escaped}<br>` +
+                     "This is a real failure, not an empty auction and not a pending stream. " +
+                     "The chat was unaffected.";
+            }
+          } catch {
+            // Diagnostics are a convenience; never let them break the panel.
+          }
+          return "<b>slot</b> hidden — no-fill, or the async decision is still in flight and will " +
+                 "arrive over the Turbo Stream. Either way the chat was never blocked.";
+        }
+
         async function sendChatMessage(message) {
           const response = await fetch("/messages", {
             method: "POST",
@@ -286,13 +345,17 @@ TEMPLATE = <<~'ERB'
           slot.dispatchEvent(new CustomEvent("wavebird:turn", {
             detail: {
               work: () => sendChatMessage(message),
-              done: () => {
+              done: async () => {
+                // In async mode an empty slot has one more cause than the
+                // blocking examples: the decision may still be in flight over
+                // the Turbo Stream. Ask the server whether it *failed* before
+                // offering that reassurance, or a rejected request reads as
+                // "any moment now" forever.
+                const filled = slot.hidden === false;
                 report([
                   `<b>mode</b> ${slot.dataset.wavebirdModeValue || "blocking"}`,
                   "<b>turn</b> finished, answer delivered",
-                  slot.hidden === false
-                    ? "<b>slot</b> filled"
-                    : "<b>slot</b> hidden — no-fill, or the async decision is still in flight and will arrive over the Turbo Stream. Either way the chat was never blocked.",
+                  filled ? "<b>slot</b> filled" : await slotReason(),
                 ]);
                 button.disabled = false;
                 input.focus();

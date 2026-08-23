@@ -145,6 +145,35 @@ RSpec.describe "examples/*.rb booted for real", :aggregate_failures do
     end
   end
 
+  describe "chat_react.rb" do
+    it_behaves_like "a runnable wavebird example", "chat_react.rb"
+
+    # The React path loads React, ReactDOM and htm from a CDN as ES modules, so
+    # nothing here can execute it -- the boot spec makes no browser. What it can
+    # pin is that the page ships the mount points the script expects, and that
+    # the slot is NOT inside either of them: React rendering into the slot would
+    # let it clobber whatever the hosted renderer mounts there, which is the one
+    # structural thing a React host has to get right.
+    it "keeps the wavebird slot outside both React roots" do
+      boot_example("chat_react.rb") do |base_url|
+        body = get("#{base_url}/").body
+
+        expect(body).to include('id="chat-root"')
+        expect(body).to include('id="status-root"')
+
+        slot_at = body.index('id="wavebird-slot-below"')
+        chat_at = body.index('id="chat-root"')
+        status_at = body.index('id="status-root"')
+
+        expect(slot_at).not_to be_nil
+        # Both roots are empty divs, so "outside" is provable by position: the
+        # slot sits between them, in neither one's subtree.
+        expect(chat_at).to be < slot_at
+        expect(slot_at).to be < status_at
+      end
+    end
+  end
+
   describe "chat_hotwire.rb" do
     it_behaves_like "a runnable wavebird example", "chat_hotwire.rb"
 

@@ -43,7 +43,7 @@ commit does; `git diff a..b` answers a different question.
 | **A** | WebSocket transport | ❌ **No** — ✔ recorded #024 | Ticket endpoint is wrapper-only. Building it means adopting the legacy transport wholesale |
 | **B** | `callback` delivery | ❌ **No** — ✔ recorded #025 | `callback_url` forces the legacy ingress body. Same boundary, same answer |
 | **C** | `slot_id` memo | ❌ **Not now** | Mutable state in a long-lived Rails singleton, for ergonomics on a path most hosts never take |
-| **D** | React | ✅ **Recipe + example** — ❌ not shipped components | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
+| **D** | React | ✅ — ✔ **DONE** (#029) | The `withTurn` seam already exists. Components are what upstream shipped and then deprecated |
 | **E** | `decision` rename | ✅ **Yes** — ✔ **COMPLETE** (#026, #027) | The one real anomaly. Free until publication, breaking after |
 | **F** | Redactor seam | ✅ **Yes** — ✔ **DONE** (#028) | The only way a host can filter the engine endpoint without monkey-patching |
 | **G** | Test the examples | ✅ **Yes, first** — ✔ **COMPLETE** | First thing a new user runs; least tested code in the repo |
@@ -225,7 +225,7 @@ oversight.
 
 ---
 
-## ✅ D. React — **BUILD** the recipe and the example. **Not** the components
+## ✅ D. React — ✔ **DONE 2026-08-21** (#029): recipe + example, no components
 
 **Today.** Hidden `<section>` + Stimulus + hosted `render.js` (#006, #008, #009).
 
@@ -250,6 +250,26 @@ that, not on the engine's Stimulus controller.
 3. **Shipped React components** in `app/javascript` — a real dependency on
    React's version matrix, JSX that needs a build step the gem does not have, and
    a surface to maintain. This is what upstream did and then deprecated.
+
+> **DONE 2026-08-21 — decision #029.** Options 1 and 2 shipped: the
+> `useWavebirdTurn` recipe in INSTALL.md and `examples/chat_react.rb`, runnable
+> with no build step. Option 3 not built, per Daniele: *"let's do one and 2 first
+> then we think about 3."*
+>
+> **The finding that made 1–2 sufficient rather than a compromise:** nothing on
+> the server is React-specific. The slot markup, the endpoint and async mode are
+> identical, so React needed an example, not a feature.
+>
+> **The one structural rule, now the real content of the item:** the slot must
+> stay outside the React tree, or a re-render clobbers the iframe the hosted
+> renderer mounts there. For a page that is React top to bottom the answer is one
+> React tree portalled into two roots either side of the slot. A boot spec
+> asserts that ordering.
+>
+> **Verified in a real browser** (the #017 lesson), driven over the DevTools
+> Protocol: form rendered, message submitted and answered, status reported
+> `render.js loaded` — so `withTurn` genuinely wrapped the turn — slot hidden on
+> the no-fill, slot outside both roots.
 
 **Recommendation: 1 and 2, explicitly not 3.** The gem's JS position has been
 "own the seam, not the framework" since #006, and shipping components would
@@ -635,7 +655,7 @@ question is cheap and stops it being reopened from the wrong premise.
 4. ~~**G (3–4)**~~ ✅ — **DONE 2026-08-21**,
    `spec/system/runnable_examples_boot_spec.rb`. **Item G is complete.**
 5. ~~**F**~~ ✅ — **DONE 2026-08-21**, `config.before_send_text` (#028).
-6. **D (1–2)** ✅ — React hook recipe + `examples/chat_react.rb`.
+6. ~~**D (1–2)**~~ ✅ — **DONE 2026-08-21** (#029). Option 3 (shipped components) remains not built, by decision.
 7. **C** ❌ — only if a host asks.
 
 **Nothing here blocks a release.** If the choice is between shipping and this

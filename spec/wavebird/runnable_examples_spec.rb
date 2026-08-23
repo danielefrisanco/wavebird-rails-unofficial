@@ -35,7 +35,7 @@ RSpec.describe "examples/*.rb (runnable single-file apps)", :aggregate_failures 
     # passing vacuously -- the failure mode that let the first version of
     # docs_turn_body_contract_spec.rb pass with the code it guarded deleted.
     expect(RUNNABLE_EXAMPLES.map { |path| File.basename(path) })
-      .to contain_exactly("chat_hotwire.rb", "chat_plain.rb")
+      .to contain_exactly("chat_hotwire.rb", "chat_plain.rb", "chat_react.rb")
   end
 
   RUNNABLE_EXAMPLES.each do |path|

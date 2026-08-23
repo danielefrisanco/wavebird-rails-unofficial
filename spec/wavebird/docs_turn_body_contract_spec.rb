@@ -52,10 +52,16 @@ RSpec.describe "documented turn body", :aggregate_failures do # rubocop:disable 
   # controller builds the body from its own values, so the example has no
   # snippet to keep in step. Adding it here would fail for the right reason and
   # the wrong cause.
+  #
+  # examples/chat_react.rb *is* here, for the mirror-image reason: its
+  # `useWavebirdTurn` hook builds the body by hand from the same dataset
+  # attributes, exactly as the plain path does. React is a third copy of this
+  # snippet, and a third copy is a third chance to drift.
   %w[
     INSTALL.md
     README.md
     examples/chat_plain.rb
+    examples/chat_react.rb
     lib/generators/wavebird/install/install_generator.rb
   ].each do |path|
     it "#{path} builds the turn body from every field the Stimulus controller sends" do

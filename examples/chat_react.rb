@@ -4,13 +4,25 @@
 # rule does not apply to it.
 # rubocop:disable Style/OneClassPerFile
 
-# wavebird-rails **without Hotwire** — the whole integration in one runnable file.
+# wavebird-rails **with React** — the whole integration in one runnable file.
 #
-#   bundle exec ruby examples/chat_plain.rb        # from a clone of this repo
+#   bundle exec ruby examples/chat_react.rb          # from a clone of this repo
 #   open http://localhost:3000
 #
-# No `rails new`, no database, no build step, no importmap, no Stimulus. The
-# counterpart with Hotwire is examples/chat_hotwire.rb.
+# No `rails new`, no database, **no build step and no bundler**: React, ReactDOM
+# and htm are loaded as ES modules from a CDN, the same trick chat_hotwire.rb
+# uses for Stimulus. htm gives JSX-like markup in a tagged template literal, so
+# there is no transpiler in the loop.
+#
+# **The gem ships no React code, and that is the point.** The seam a React app
+# needs already exists and is framework-agnostic:
+#
+#   window.wavebird.withTurn({ target, body }, work)
+#
+# So this example is not a port of upstream's React bindings — those sit beside
+# `mount` DOM builders that upstream itself deprecated. It is a ~20 line
+# `useWavebirdTurn` hook you copy into your own app. The same hook is written out
+# in INSTALL.md; this file is the proof it runs.
 #
 # It runs **without a wavebird key**: the client is fail-silent, so an
 # unconfigured key produces a no-fill — the slot stays hidden and the chat still
@@ -18,7 +30,7 @@
 # slot is never ambiguous. For real sandbox placements:
 #
 #   WAVEBIRD_SECRET_KEY=sk_test_... WAVEBIRD_CLIENT_ID=wbproj_... \
-#     bundle exec ruby examples/chat_plain.rb
+#     bundle exec ruby examples/chat_react.rb
 
 require "action_controller/railtie"
 require "puma"
@@ -118,7 +130,7 @@ end
 
 # The whole Rails app. A real host has this in config/application.rb and needs
 # almost none of it — these settings only exist to run without an app skeleton.
-class ChatPlainDemo < Rails::Application
+class ChatReactDemo < Rails::Application
   config.root = __dir__
   config.eager_load = false
   config.consider_all_requests_local = true
@@ -184,7 +196,7 @@ TEMPLATE = <<~'ERB'
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>wavebird-rails — chat without Hotwire</title>
+      <title>wavebird-rails — chat with React</title>
       <style>
         :root {
           color-scheme: light;
@@ -237,20 +249,16 @@ TEMPLATE = <<~'ERB'
     </head>
     <body>
       <main>
-        <h1>Chat, without Hotwire</h1>
+        <h1>Chat, with React</h1>
         <p class="lede">
-          A sponsored slot auctioned while the answer generates. No importmap, no
-          Stimulus — just <code>window.wavebird.withTurn(...)</code>.
+          A sponsored slot auctioned while the answer generates, driven from a
+          React component through a <code>useWavebirdTurn</code> hook. No build
+          step: React and htm load as ES modules from a CDN.
         </p>
 
-        <div class="panel">
-          <h2>Conversation</h2>
-          <div id="messages"></div>
-          <form id="composer">
-            <input type="text" name="message" placeholder="Ask something…" autocomplete="off">
-            <button type="submit">Send</button>
-          </form>
-        </div>
+        <%# React mounts the chat here. The slot below is deliberately
+            outside this root — see the comment by createRoot. %>
+        <div id="chat-root"></div>
 
         <%#
           Loads wavebird's hosted renderer once per page. Optional — the gem can
@@ -266,23 +274,64 @@ TEMPLATE = <<~'ERB'
                           session_id: wavebird_session_id,
                           position: "below" %>
 
+        <%# The second React root. The slot sits between the two and belongs
+            to neither — see the comment by createRoot. %>
         <div class="panel">
           <h2>What just happened</h2>
-          <p id="status">Send a message to start a turn.</p>
+          <div id="status-root"></div>
         </div>
       </main>
 
       <script type="module">
-        const composer = document.querySelector("#composer");
-        const button   = composer.querySelector("button");
-        const input    = composer.querySelector("input");
-        const messages = document.querySelector("#messages");
-        const status   = document.querySelector("#status");
-        const slot     = document.querySelector("#wavebird-slot-below");
+        // React with no build step: htm turns a tagged template literal into
+        // React.createElement calls, so there is no JSX to transpile. A real app
+        // would use its own bundler; nothing here depends on this trick.
+        import React, { useState, useCallback, useRef } from "https://esm.sh/react@18.3.1";
+        import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+        import { createPortal } from "https://esm.sh/react-dom@18.3.1";
+        import htm from "https://esm.sh/htm@3.1.1";
 
-        // Without this panel an empty slot is ambiguous: a no-fill and a broken
-        // integration look identical, which is exactly the trap that hid #017.
-        function report(lines) { status.innerHTML = lines.join("<br>"); }
+        const html = htm.bind(React.createElement);
+
+        // ------------------------------------------------------------------
+        // useWavebirdTurn — the whole React integration. Copy this into your app.
+        // ------------------------------------------------------------------
+        //
+        // It does not touch React state, render anything, or own the slot: the
+        // hosted renderer owns that <section>, and React must not fight it over
+        // the same DOM. The hook's only job is to wrap the work of one chat turn
+        // so wavebird can auction a placement while the answer generates.
+        function useWavebirdTurn(slotId) {
+          // A ref, not state: reading the slot must never trigger a re-render,
+          // and the element is owned by the renderer rather than by React.
+          const slotRef = useRef(null);
+
+          return useCallback(async (work) => {
+            const slot = slotRef.current ?? (slotRef.current = document.getElementById(slotId));
+
+            // Same three fields the Stimulus controller sends. Getting this set
+            // wrong is silent: the turn still works and the auction quietly
+            // changes behaviour, which is why a spec pins these keys across
+            // every place the gem documents them.
+            const body = {
+              session_id: slot.dataset.wavebirdSessionIdValue,
+              position: slot.dataset.wavebirdPositionValue,
+            };
+            // Present only when the slot was rendered async: true. The endpoint
+            // reads the delivery mode from the body, so omitting it quietly
+            // serves the blocking path.
+            if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
+            // If render.js was blocked or never loaded, run the work unwrapped.
+            // The ad path must never break the chat.
+            if (!window.wavebird?.withTurn) {
+              await work();
+              return { slot, wrapped: false };
+            }
+            await window.wavebird.withTurn({ target: slot, body }, work);
+            return { slot, wrapped: true };
+          }, [slotId]);
+        }
 
         // Example-only endpoint; see Wavebird::ExampleDiagnostics. A real app
         // sends on_error to its error tracker, never to the browser.
@@ -302,68 +351,105 @@ TEMPLATE = <<~'ERB'
                  "wavebird answered normally and had nothing to show. This is a success, not an error.";
         }
 
-        async function sendChatMessage(message) {
-          const response = await fetch("/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message }),
-          });
-          const data = await response.json();
-          // textContent, not innerHTML: a reply is untrusted content. Here it is
-          // your own echo, but the moment this is a real model call it becomes
-          // attacker-influenceable through prompt injection.
-          const line = document.createElement("p");
-          line.textContent = data.reply;
-          messages.appendChild(line);
+        // ------------------------------------------------------------------
+        // The host app — ordinary React, with no wavebird concepts in it.
+        // ------------------------------------------------------------------
+        function Chat({ setStatus }) {
+          const [messages, setMessages] = useState([]);
+          const [draft, setDraft] = useState("");
+          const [busy, setBusy] = useState(false);
+
+          const withWavebirdTurn = useWavebirdTurn("wavebird-slot-below");
+
+          const send = useCallback(async (event) => {
+            event.preventDefault();
+            const message = draft.trim();
+            if (!message) return;
+
+            setDraft("");
+            setBusy(true);
+            setStatus(["<b>turn</b> started, placement requested…"]);
+
+            // Stands in for your real AI endpoint.
+            const work = async () => {
+              const response = await fetch("/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message }),
+              });
+              const data = await response.json();
+              // Stored as text and rendered as a React child, never as HTML: a
+              // reply is untrusted the moment it comes from a real model.
+              setMessages((prev) => [...prev, data.reply]);
+            };
+
+            const { slot, wrapped } = await withWavebirdTurn(work);
+
+            // Without this panel an empty slot is ambiguous: a no-fill and a
+            // broken integration look identical, the trap that hid #017. Three
+            // causes look the same from here -- an honest no-fill, a missing
+            // key, and a request wavebird rejected -- so ask the server which it
+            // was rather than guessing in the copy.
+            const filled = slot.hidden === false;
+            setStatus([
+              `<b>render.js</b> ${wrapped ? "loaded" : "not loaded — turn ran unwrapped"}`,
+              "<b>turn</b> finished, answer delivered",
+              filled ? "<b>slot</b> filled — wavebird returned a placement" : await slotReason(),
+            ]);
+            setBusy(false);
+          }, [draft, withWavebirdTurn, setStatus]);
+
+          return html`
+            <${React.Fragment}>
+              <div className="panel">
+                <h2>Conversation</h2>
+                <div id="messages">
+                  ${messages.map((text, i) => html`<p key=${i}>${text}</p>`)}
+                </div>
+                <form onSubmit=${send}>
+                  <input
+                    type="text"
+                    value=${draft}
+                    placeholder="Ask something…"
+                    autoComplete="off"
+                    onInput=${(e) => setDraft(e.target.value)} />
+                  <button type="submit" disabled=${busy}>Send</button>
+                </form>
+              </div>
+            <//>
+          `;
         }
 
-        composer.addEventListener("submit", async (event) => {
-          event.preventDefault();
-          const message = input.value.trim();
-          if (!message) return;
-          input.value = "";
-          button.disabled = true;
+        // Two roots, deliberately. The wavebird slot sits between them in the
+        // document and belongs to neither: React never renders into it, so it
+        // cannot clobber what the hosted renderer mounts there. That separation
+        // is the only structural thing a React host has to get right.
+        //
+        // A real app would use a context or a store to share this; a module-level
+        // subscriber keeps the example to one idea per file.
+        function App() {
+          const [status, setStatus] = useState(["Send a message to start a turn."]);
 
-          const body = {
-            session_id: slot.dataset.wavebirdSessionIdValue,
-            position: slot.dataset.wavebirdPositionValue,
-          };
-          // Present only when the slot was rendered async: true. The endpoint
-          // reads the delivery mode from the body, so omitting it quietly
-          // serves the blocking path.
-          if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+          return html`
+            <${React.Fragment}>
+              ${createPortal(html`<${Chat} setStatus=${setStatus} />`, chatRoot)}
+              ${createPortal(html`<${Status} lines=${status} />`, statusRoot)}
+            <//>
+          `;
+        }
 
-          const send = () => sendChatMessage(message);
-          const loaded = Boolean(window.wavebird?.withTurn);
+        function Status({ lines }) {
+          // The status strings are written above in this file, never from the
+          // server or the model, so the <b> tags in them are ours.
+          return html`<p id="status" dangerouslySetInnerHTML=${{ __html: lines.join("<br>") }} />`;
+        }
 
-          report([
-            `<b>render.js</b> ${loaded ? "loaded" : "not loaded — running the turn unwrapped"}`,
-            "<b>turn</b> started, placement requested…",
-          ]);
+        const chatRoot = document.getElementById("chat-root");
+        const statusRoot = document.getElementById("status-root");
 
-          // The guard matters: if render.js was blocked or never loaded, the
-          // turn still runs. The ad path must never break the chat.
-          if (loaded) {
-            await window.wavebird.withTurn({ target: slot, body }, send);
-          } else {
-            await send();
-          }
-
-          const filled = slot.hidden === false;
-          // An empty slot has three causes that look identical from here: an
-          // honest no-fill, a missing key, and a request wavebird rejected. The
-          // gem swallows the third by design, so ask the server which it was
-          // rather than guessing in the copy -- guessing is what made a real
-          // "Consent is not current" read as "no eligible campaign".
-          const why = filled ? null : await slotReason();
-          report([
-            `<b>render.js</b> ${loaded ? "loaded" : "not loaded"}`,
-            "<b>turn</b> finished, answer delivered",
-            filled ? "<b>slot</b> filled — wavebird returned a placement" : why,
-          ]);
-          button.disabled = false;
-          input.focus();
-        });
+        // One React tree, portalled into two places, so state is shared without
+        // a store and the slot between them is left completely alone.
+        createRoot(document.createElement("div")).render(html`<${App} />`);
       </script>
     </body>
   </html>
@@ -371,7 +457,7 @@ ERB
 # rubocop:enable Style/RedundantHeredocDelimiterQuotes
 
 port = ENV.fetch("PORT", 3000).to_i
-puts "\n  wavebird-rails — chat WITHOUT Hotwire -> http://localhost:#{port}"
+puts "\n  wavebird-rails — chat WITH React (no build step) -> http://localhost:#{port}"
 puts "  #{Wavebird::ExampleCredentials.summary}\n\n"
 
 # Puma's server API directly rather than a Rack handler: the handler namespace

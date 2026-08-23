@@ -136,6 +136,12 @@ wavebird's canonical REST v1 API.
 
 #### Documentation and tooling
 
+- **React**: a `useWavebirdTurn` hook recipe in `INSTALL.md` and a runnable
+  `examples/chat_react.rb` (React + `htm` from a CDN, no build step). The gem
+  ships no React code — `window.wavebird.withTurn` is already framework-agnostic,
+  so React needs an example rather than a feature. The one structural rule is
+  that the slot stays outside the React tree; the example portals one React tree
+  into two roots either side of it (#029).
 - `README.md` with quickstart, full public API reference, credential-class table
   and the privacy rules the gem enforces; `INSTALL.md` covering importmap and
   bundler setups; `examples/chat_with_sponsored_slot/` as a copy-pasteable

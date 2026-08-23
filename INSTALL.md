@@ -228,6 +228,82 @@ particular turn needs a body the controller does not build.
 
 ---
 
+## React
+
+**The gem ships no React code, and will not.** The seam a React app needs already
+exists and is framework-agnostic — `window.wavebird.withTurn({ target, body },
+work)`. So a React integration is about twenty lines you own, not a dependency
+you adopt. (Upstream's own React bindings sit beside `mount` DOM builders it has
+since deprecated; "port what upstream has" is not the brief here.)
+
+Copy this hook into your app:
+
+```jsx
+import { useCallback, useRef } from "react";
+
+// Wraps the work of one chat turn so wavebird can auction a placement while
+// your answer generates. It renders nothing and holds no state: the hosted
+// renderer owns the slot element, and React must not fight it for that DOM.
+export function useWavebirdTurn(slotId = "wavebird-slot-below") {
+  const slotRef = useRef(null);
+
+  return useCallback(async (work) => {
+    const slot = slotRef.current ?? (slotRef.current = document.getElementById(slotId));
+
+    const body = {
+      session_id: slot.dataset.wavebirdSessionIdValue,
+      position: slot.dataset.wavebirdPositionValue,
+    };
+    // Present only when the slot was rendered `async: true`. The endpoint reads
+    // the delivery mode from the body, so omitting it quietly serves the
+    // blocking path — a slot that fills but never uses its Turbo Stream.
+    if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
+
+    // If render.js was blocked or never loaded, run the work unwrapped. The ad
+    // path must never break the chat.
+    if (!window.wavebird?.withTurn) return work();
+
+    return window.wavebird.withTurn({ target: slot, body }, work);
+  }, [slotId]);
+}
+```
+
+Then use it around whatever your turn already does:
+
+```jsx
+function Chat() {
+  const withWavebirdTurn = useWavebirdTurn();
+
+  const send = async (message) => {
+    await withWavebirdTurn(async () => {
+      const response = await fetch("/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      setMessages((prev) => [...prev, (await response.json()).reply]);
+    });
+  };
+  // ...
+}
+```
+
+**The one structural rule: keep the slot outside your React tree.** Render it in
+your ERB layout, not from a component. The hosted renderer mounts an iframe into
+that `<section>`, and a React re-render over the same node would clobber it. If
+your page is React top to bottom, portal into two roots on either side of the
+slot — [`examples/chat_react.rb`](examples/chat_react.rb) shows exactly that, and
+runs with no build step (React and `htm` from a CDN):
+
+```bash
+bundle exec ruby examples/chat_react.rb
+```
+
+Everything else is unchanged: the slot markup, the endpoint, and async mode all
+work identically. There is nothing React-specific on the server.
+
+---
+
 ## Async delivery mode (optional)
 
 By default the slot fills **synchronously**: the browser POSTs, the server waits
