@@ -18,7 +18,7 @@ A–G, decisions #024–#029); this supersedes nothing in it.
 |---|---|---|
 | 0 | Refresh the snapshot | ✔ **done** — `render-js-snapshot-2026-08-23.js`, old one kept |
 | **A** | Send `authoritative_consent` | ✔ **done 2026-08-23** (#030) — verified against the live renderer |
-| **B** | Make renderer drift detectable | **next** |
+| **B** | Make renderer drift detectable | ✔ **done 2026-08-23** (#031) |
 | C | Close #023 (`click_url` now validated) | not started — recording only |
 | D | Record the legacy beacon route | not started — recording only |
 | E | `.env.test` placeholder | Daniele's |
@@ -46,10 +46,8 @@ consent story (item E), not this gate.
 example asserting the stand-in tracks the newest snapshot. It fails today and is
 meant to. Remove the `pending` when B lands.
 
-**Do not release yet.** The browser integration works again as of #030, but **B
-is still open**: the system suite still runs against a stand-in frozen at the old
-contract, so it cannot see the next change of this kind — and this one cost a day
-to find by hand.
+**Release blockers cleared.** A and B are both done. What remains (C, D) is
+recording only, and E is Daniele's. Run `rake render_js_drift` before tagging.
 
 ---
 
@@ -276,24 +274,41 @@ Without it, A is one lucky fix and the next vendor change is silent again.
 
 - [ ] **Refresh the snapshot** to `docs/upstream/render-js-snapshot-2026-08-23.js`
       and keep the old one. The diff between them *is* the evidence for this plan.
-- [ ] **Stop hand-writing the stand-in.** `spec/dummy/public/v1/render.js` should
-      be derived from the snapshot, not written to match our assumptions. If it
-      cannot be used verbatim (it beacons to a blocked host — #012a), then it must
-      at least be *generated* from it, so no precondition can be quietly dropped.
-- [ ] **Make `render_js_contract_spec` assert preconditions, not names.** It
-      should fail when the live renderer gains a gate we do not satisfy. Concrete
-      form: extract `startTurn`'s guard clauses from the snapshot and assert the
-      gem's documented turn options satisfy every one. Node is already used
-      conditionally in that spec (#017), which is the mechanism.
-- [ ] **A staleness check.** The renderer is served, not versioned (finding 3), so
-      the only defence is refetching. Options: a CI job that diffs the live file
-      against the snapshot and fails on change; or a rake task a human runs. CI is
-      better and needs network in CI — decide which.
-- [ ] **At least one test against the real renderer.** Everything today runs
-      against the stand-in. One example that loads the genuine `render.js` and
-      asserts a turn reaches our endpoint would have caught this on day one.
-      Needs network, so it cannot be in the default gate — a separate rake task,
-      run before release.
+- [x] ~~**Stop hand-writing the stand-in.**~~ **Done, by a different route than
+      proposed.** Generating it was rejected: the real file is minified, carries a
+      NUL byte, and beacons to a blocked host, so a generator would be a second
+      thing to keep honest. Instead the stand-in now **ports every gate** the
+      snapshot enforces, and a spec compares the two sets, so the hand-written
+      part can no longer silently omit a precondition. Porting the consent gate
+      immediately caught two real gaps the old stand-in could not see: the dummy
+      app had no consent configured, and its path C used the bare-selector
+      `withTurn` form — which **can no longer work at all**, since `render.js`
+      reads consent only from an options object. INSTALL.md documented that form;
+      now corrected.
+- [x] ~~**Make `render_js_contract_spec` assert preconditions, not names.**~~
+      **Done.** It extracts every helper the snapshot negates inside a guard
+      (`if(!x(`) and requires the stand-in to *define* each one. Justified
+      omissions live in an explicit `UNIMPLEMENTED_GATES` allowlist with reasons,
+      so skipping a gate is a decision someone wrote down rather than an omission
+      nobody noticed. Verified in both directions: a gate added upstream is named,
+      and a gate deleted from the stand-in is named. Matching on definitions, not
+      calls — the first version scanned calls and passed with the function body
+      deleted.
+- [x] ~~**A staleness check.**~~ **Done: `rake render_js_drift`.** Refetches the
+      hosted file and fails if it differs from the newest snapshot, telling the
+      reader to save a dated copy and let the contract spec name what broke.
+      Deliberately **not** in the default gate: it needs network, and `rake` must
+      stay runnable offline. Run it before tagging a release. Wiring it into CI is
+      the obvious follow-up and is left as a choice rather than assumed.
+- [ ] **At least one automated test against the real renderer.** Still open, and
+      the honest residual gap. `rake render_js_drift` detects that the file
+      *changed* and the contract spec says which gate appeared, which together
+      would have caught this one — but nothing yet drives the genuine `render.js`
+      in a browser and asserts a turn reaches the endpoint. That was done **by
+      hand** for #030 (headless Chrome over the DevTools Protocol, watching for
+      `POST /wavebird/sponsor_slot`), and by hand is how it stays until this is
+      built. Needs network and a browser, so it belongs beside `spec:system` as
+      its own task, never in the default gate.
 
 ### C. Resolve #023 — `click_url` is now validated upstream
 

@@ -78,21 +78,28 @@ That is the whole integration. No importmap pins, no asset load path, no
 Stimulus. Those three data attributes are exactly what the Stimulus controller
 forwards, so the two paths send an identical request body.
 
-**Why the options object rather than the one-liner.** `withTurn` also takes a
-bare selector:
+**The bare-selector one-liner no longer works.** `withTurn` still accepts a
+selector instead of an options object:
 
 ```js
+// Does nothing as of 2026-08-23. Kept here so the shape is recognisable, not
+// as something to copy.
 window.wavebird.withTurn("#wavebird-slot-below", () => sendChatMessage(message));
 ```
 
-which is shorter but uses `render.js`'s **default body — a fresh random session
-id per turn**, and carries no position or delivery mode at all. Passing `body`
-explicitly sends the stable `wavebird_session_id` your app already has, which is
-what keeps a visitor's turns attributable to one session, and it is the only way
-async delivery reaches the endpoint. The slot element carries all three values as
-data attributes for exactly this reason, so no extra plumbing is needed. (The
-behaviour is pinned by a spec against the dated `render.js` snapshot, so an
-upstream change cannot silently downgrade it.)
+but `render.js` reads `authoritative_consent` **only from an options object**, so
+the selector form can no longer satisfy the consent gate — the renderer refuses
+the turn and your endpoint is never called. It was already the weaker form: it
+uses `render.js`'s default body, a fresh random session id per turn, and carries
+no position or delivery mode. Now it is simply non-functional.
+
+Pass the options object. It sends the stable `wavebird_session_id` your app
+already has, which keeps a visitor's turns attributable to one session; it is the
+only way async delivery reaches the endpoint; and it is the only way consent
+reaches the renderer. The slot element carries every one of those values as a
+data attribute for exactly this reason, so no extra plumbing is needed. (Pinned
+by specs against the dated `render.js` snapshot, so an upstream change cannot
+silently downgrade it.)
 
 **If `render.js` might not have loaded yet**, guard on it — your chat turn must
 never depend on the ad path:

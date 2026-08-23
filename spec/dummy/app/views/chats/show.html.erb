@@ -54,10 +54,20 @@
 
   // Path C (decision #008): call the vendor global directly, exactly as the
   // integration brief documents, with the documented availability guard.
+  //
+  // The options form, not the bare-selector one-liner: render.js reads
+  // authoritative_consent only from an options object, so the selector form
+  // cannot satisfy the consent gate and the renderer refuses the turn (#030).
   document.querySelector("#send-path-c").addEventListener("click", async () => {
     const send = () => sendChatMessage();
+    const slot = document.querySelector("#wavebird-slot-below");
     if (window.wavebird?.withTurn) {
-      await window.wavebird.withTurn("#wavebird-slot-below", send);
+      await window.wavebird.withTurn({
+        target: slot,
+        authoritative_consent: slot.dataset.wavebirdConsentValue
+          ? JSON.parse(slot.dataset.wavebirdConsentValue)
+          : null,
+      }, send);
     } else {
       await send();
     }

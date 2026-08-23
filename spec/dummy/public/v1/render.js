@@ -2,7 +2,7 @@
 //
 // The suite runs with net connections disabled, so the real hosted script cannot
 // be fetched. This file implements the *contract* the real one exposes, verified
-// against docs/upstream/render-js-snapshot-2026-07-18.js:
+// against docs/upstream/render-js-snapshot-2026-08-23.js:
 //
 //   window.wavebird.withTurn(input, work)   -> startTurn + work + turn.finish()
 //   window.wavebird.startTurn(input)        -> {decision, finish, cancel}; POSTs
@@ -16,8 +16,13 @@
 // the surface this gem drives. What matters here is the element lifecycle the gem
 // depends on: who POSTs, who reveals, who hides.
 //
-// Kept honest by spec/wavebird/system/render_js_contract_spec.rb, which asserts
-// the real snapshot still exposes exactly the entry points stubbed here.
+// Kept honest by spec/wavebird/render_js_contract_spec.rb, which asserts the
+// real snapshot still exposes the entry points stubbed here AND that every gate
+// the snapshot enforces is enforced here too. That second half exists because
+// this file being frozen at an old contract is exactly how the gem shipped a
+// browser integration that could not run: wavebird added the consent gate on
+// 2026-08-23, this stand-in did not have it, and 27 green system examples said
+// nothing (plan v3).
 (function (global) {
   "use strict";
 
@@ -30,10 +35,14 @@
       input &&
       typeof input === "object" &&
       !input.nodeType &&
-      ("target" in input || "endpoint" in input || "body" in input);
+      ("target" in input ||
+        "endpoint" in input ||
+        "body" in input ||
+        "authoritative_consent" in input);
     var target = byTarget(isOptions ? input.target : input);
     return {
       target: target,
+      authoritative_consent: isOptions ? input.authoritative_consent : null,
       endpoint:
         (isOptions && input.endpoint) ||
         (target && target.getAttribute("data-wavebird-endpoint")) ||
@@ -55,6 +64,26 @@
   // equivalent here.
   function scriptOrigin() {
     return global.location.origin;
+  }
+
+  // Ported from consentAllowsAdActivity in the 2026-08-23 snapshot, rule for
+  // rule. Every one of these is a way the real renderer silently declines to run
+  // a turn, so a stand-in that skipped any of them would let the system suite
+  // pass on a payload the real script refuses.
+  function resolveAuthoritativeConsent(resolver) {
+    try {
+      return typeof resolver === "function" ? resolver() : resolver;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function consentAllowsAdActivity(resolver) {
+    var consent = resolveAuthoritativeConsent(resolver);
+    if (!consent || typeof consent !== "object" || consent.lifecycle_state !== "granted") return false;
+    if (!Number.isSafeInteger(consent.revision) || consent.revision < 1) return false;
+    if (!Number.isSafeInteger(consent.updated_at_ms) || !Number.isSafeInteger(consent.expires_at_ms)) return false;
+    return consent.expires_at_ms > Date.now();
   }
 
   function placementFrom(input) {
@@ -97,12 +126,19 @@
     api.__calls.clear.push(true);
   };
 
+  // Gate 3 of 3. Note the fallback to the *placement's* own consent: that is
+  // what lets the gem's async reveal satisfy the gate with no JavaScript at all,
+  // by carrying consent in the broadcast payload (SlotPayload#with_consent).
   api.renderPlacement = function (options) {
     var target = byTarget(options && options.target);
     // Resolved from the options object itself, like the real renderer: it accepts
     // `{placement: …}` or `{decision: …}` and unwraps either the same way.
-    var render = renderFrom(placementFrom(options));
-    if (!target || !render || !render.frame_url) {
+    var placement = placementFrom(options);
+    var render = renderFrom(placement);
+    var consent =
+      (options && options.authoritative_consent) ||
+      (placement && placement.authoritative_consent);
+    if (!target || !render || !render.frame_url || !consentAllowsAdActivity(consent)) {
       api.clearPlacement({ target: target });
       return Promise.resolve(null);
     }
@@ -138,7 +174,19 @@
     // A new turn always starts from a cleared slot, like the real renderer.
     api.clearPlacement({ target: target });
 
-    var turn = { target: target, finished: false };
+    // Gate 1 of 3, before the fetch: no consent, no request. This is the one
+    // that made the real integration inert -- the endpoint is never called and
+    // nothing is logged.
+    if (!consentAllowsAdActivity(opts.authoritative_consent)) {
+      return {
+        target: target,
+        decision: Promise.resolve(null),
+        finish: function () { return Promise.resolve(); },
+        cancel: function () {},
+      };
+    }
+
+    var turn = { target: target, finished: false, authoritativeConsent: opts.authoritative_consent };
     turn.decision = global
       .fetch(opts.endpoint, {
         method: "POST",
@@ -156,6 +204,11 @@
         // The real startTurn resolves the endpoint's answer by wrapping it as
         // `{decision: response}` — so the response must carry `placement`.
         var p = placementFrom({ decision: decision });
+        // Gate 2 of 3: consent can be withdrawn while the request is in flight.
+        if (!consentAllowsAdActivity(turn.authoritativeConsent)) {
+          api.clearPlacement({ target: target });
+          return null;
+        }
         if (!p || !p.render) {
           api.clearPlacement({ target: target });
           return decision;
