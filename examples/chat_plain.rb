@@ -39,6 +39,35 @@ rescue LoadError
   nil
 end
 
+# Records the last swallowed failure so the page can say *why* a slot is empty.
+#
+# The gem is fail-silent by design: a wavebird outage, a rejected request and an
+# honest empty auction all reach the browser as the same `{"fill": false}`, so
+# the ad path can never break a chat turn. That is right for production and
+# actively unhelpful in a demo -- it is what made "Consent is not current" look
+# like "no eligible campaign" until someone read the server log.
+#
+# This is **example-only scaffolding, not something the gem ships**: it hands the
+# browser an internal error string, which a real app should not do. `on_error` is
+# the supported seam; in production it goes to your error tracker, not to a page.
+module Wavebird
+  # Last-swallowed-error holder for the examples' status panel.
+  module ExampleDiagnostics
+    module_function
+
+    def record(error)
+      @mutex ||= Mutex.new
+      @mutex.synchronize { @last = "#{error.class.name.split('::').last}: #{error.message}" }
+    end
+
+    # Read-and-clear: each turn reports its own failure, never a stale one.
+    def take
+      @mutex ||= Mutex.new
+      @mutex.synchronize { @last.tap { @last = nil } }
+    end
+  end
+end
+
 # --------------------------------------------------------------------------
 # 1. Configuration — the initializer a host app puts in config/initializers/.
 # --------------------------------------------------------------------------
@@ -53,7 +82,10 @@ Wavebird.configure do |config|
 
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
-  config.on_error = ->(error) { warn("[wavebird] swallowed: #{error.class}: #{error.message}") }
+  config.on_error = lambda { |error|
+    warn("[wavebird] swallowed: #{error.class}: #{error.message}")
+    Wavebird::ExampleDiagnostics.record(error)
+  }
 end
 
 # Reports which credentials are present without ever printing their values —
@@ -105,6 +137,9 @@ Rails.application.routes.draw do
   mount Wavebird::Engine => "/wavebird"
   root "chats#show"
   post "/messages", to: "chats#reply"
+  # Example-only: lets the status panel report why a slot is empty. Not part of
+  # the gem, and not something to copy into a real app.
+  get "/demo/diagnostics", to: "chats#diagnostics"
 end
 
 # --------------------------------------------------------------------------
@@ -128,6 +163,11 @@ class ChatsController < ActionController::Base
   def reply
     sleep 2
     render json: { reply: "You said: #{params[:message]}" }
+  end
+
+  # Example-only. See Wavebird::ExampleDiagnostics.
+  def diagnostics
+    render json: { last_error: Wavebird::ExampleDiagnostics.take }
   end
 end
 
@@ -244,6 +284,24 @@ TEMPLATE = <<~'ERB'
         // integration look identical, which is exactly the trap that hid #017.
         function report(lines) { status.innerHTML = lines.join("<br>"); }
 
+        // Example-only endpoint; see Wavebird::ExampleDiagnostics. A real app
+        // sends on_error to its error tracker, never to the browser.
+        async function slotReason() {
+          try {
+            const response = await fetch("/demo/diagnostics");
+            const { last_error: lastError } = await response.json();
+            if (lastError) {
+              const escaped = new Option(lastError).innerHTML;
+              return `<b>slot</b> hidden — wavebird <b>rejected the request</b>: ${escaped}<br>` +
+                     "This is a real failure, not an empty auction. The chat was unaffected.";
+            }
+          } catch {
+            // Diagnostics are a convenience; never let them break the panel.
+          }
+          return "<b>slot</b> hidden — no-fill: no key configured, or no eligible campaign. " +
+                 "wavebird answered normally and had nothing to show. This is a success, not an error.";
+        }
+
         async function sendChatMessage(message) {
           const response = await fetch("/messages", {
             method: "POST",
@@ -292,12 +350,16 @@ TEMPLATE = <<~'ERB'
           }
 
           const filled = slot.hidden === false;
+          // An empty slot has three causes that look identical from here: an
+          // honest no-fill, a missing key, and a request wavebird rejected. The
+          // gem swallows the third by design, so ask the server which it was
+          // rather than guessing in the copy -- guessing is what made a real
+          // "Consent is not current" read as "no eligible campaign".
+          const why = filled ? null : await slotReason();
           report([
             `<b>render.js</b> ${loaded ? "loaded" : "not loaded"}`,
             "<b>turn</b> finished, answer delivered",
-            filled
-              ? "<b>slot</b> filled — wavebird returned a placement"
-              : "<b>slot</b> hidden — no-fill (no key configured, or no eligible campaign). This is a success, not an error.",
+            filled ? "<b>slot</b> filled — wavebird returned a placement" : why,
           ]);
           button.disabled = false;
           input.focus();
