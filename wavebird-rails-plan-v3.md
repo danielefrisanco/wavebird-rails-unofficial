@@ -12,6 +12,36 @@ A–G, decisions #024–#029); this supersedes nothing in it.
 
 ---
 
+## Status — 2026-08-23
+
+| | Item | State |
+|---|---|---|
+| 0 | Refresh the snapshot | ✔ **done** — `render-js-snapshot-2026-08-23.js`, old one kept |
+| **A** | Send `authoritative_consent` | **next — blocked on one decision** |
+| **B** | Make renderer drift detectable | **next, alongside A** |
+| C | Close #023 (`click_url` now validated) | not started — recording only |
+| D | Record the legacy beacon route | not started — recording only |
+| E | `.env.test` placeholder | Daniele's |
+
+**Merged to `main` and green** (473 unit / 0 failures / 1 pending, 27 system,
+RuboCop clean, YARD 100%): plan v2 complete through item D (#029), the examples'
+diagnostics fix, the refreshed snapshot, and this plan. **No gem code has changed
+in response to the finding yet.**
+
+**The one decision blocking A: where does the consent object come from?**
+Recommendation is `config.authoritative_consent`, a callable resolved per
+request — same convention as `secret_key` and `before_send_text` (#028). See the
+options under item A.
+
+**Known-broken, deliberately visible:** `render_js_contract_spec` has a `pending`
+example asserting the stand-in tracks the newest snapshot. It fails today and is
+meant to. Remove the `pending` when B lands.
+
+**Do not release.** The gem installs, passes its gate, serves its endpoint, and
+never shows an ad.
+
+---
+
 ## How this was found, and why that matters more than the bug
 
 The bug is a missing field. The reason it survived is the part worth fixing.
