@@ -215,6 +215,29 @@ break your flow.
 caller bug, not a wavebird failure (upstream's compiler rejects it before the
 call is made).
 
+### Reading an error
+
+Every `Wavebird::Error` carries the API's envelope, including fields wavebird
+does not document but does send — and which are usually the only actionable part:
+
+| Reader | Example |
+|---|---|
+| `#message` | `"Request validation failed. Check the request body schema…"` |
+| `#code` | `"validation_error"` |
+| `#reason_code` | `"e01_request_authority_malformed_bidfloor"` |
+| `#hint` | `"Use the flat Server API request body: client_id, session_id, …"` |
+| `#expected_shape` | `"flat_server_api_v1"` |
+| `#fields` | `[{"path" => "overrides.bidfloor", "message" => "Expected a non-negative number.", "expected" => "number >= 0"}]` |
+| `#request_id` | quote this to wavebird support |
+
+Note the gap between the first two rows and the third: `message` says "check the
+request body schema", `reason_code` names the actual problem. **`#diagnostic_message`
+returns them together**, and is what `on_error` and the gem's own log lines use:
+
+```
+Wavebird::ValidationError: Invalid placement request. | reason_code=e01_request_authority_malformed_bidfloor | field overrides.bidfloor: Expected a non-negative number.
+```
+
 ### `Wavebird::Client` — raising (typed errors)
 
 Instantiate directly (`Wavebird::Client.new`) when you want exceptions.

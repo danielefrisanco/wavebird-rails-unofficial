@@ -212,7 +212,14 @@ module Wavebird
       rescue StandardError
         nil # observers must never break the host flow (upstream behavior)
       end
-      config.logger&.warn("[wavebird] #{error.class}: #{error.message}")
+      # diagnostic_message, not message: the API's `message` is often a generic
+      # "check the request body schema" while reason_code/hint/fields name the
+      # actual cause. A log line that omits them sends the reader guessing.
+      #
+      # No is_a? guard here, unlike Client#report_swallowed_error: every caller
+      # of this method rescues `Error` specifically, so a plain exception cannot
+      # reach it. A defensive branch would be untestable and therefore untested.
+      config.logger&.warn("[wavebird] #{error.class}: #{error.diagnostic_message}")
     end
 
     # A rate limit is a documented outcome, not a failure: upstream logs it at
