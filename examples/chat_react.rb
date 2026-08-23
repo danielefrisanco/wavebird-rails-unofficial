@@ -92,6 +92,19 @@ Wavebird.configure do |config|
   config.logger     = Logger.new($stdout)
   config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
 
+  # **Required, or no ad is ever requested.** wavebird's hosted renderer gates
+  # every turn on this object and refuses silently without it -- no request, no
+  # error, nothing in the console. It is your consent management system's answer
+  # about this visitor, which is why only you can supply it; the gem never
+  # invents one. Resolved fresh on each slot render, so a withdrawal takes
+  # effect on the next turn.
+  #
+  # Hard-coded here because an example has no CMP. A real app reads its own
+  # consent record: `MyConsentStore.for(Current.session)`.
+  config.authoritative_consent = lambda do
+    { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }
+  end
+
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
   config.on_error = lambda { |error|
@@ -322,13 +335,25 @@ TEMPLATE = <<~'ERB'
             // serves the blocking path.
             if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
 
+            // The hosted renderer refuses the turn without this: startTurn
+            // checks authoritative_consent before it fetches anything and
+            // returns a null decision, so the endpoint is never called and
+            // nothing is logged. The view helper serialises it onto the slot.
+            let consent = null;
+            try {
+              const raw = slot.dataset.wavebirdConsentValue;
+              if (raw) consent = JSON.parse(raw);
+            } catch { /* a broken consent config costs the ad, never the turn */ }
+
             // If render.js was blocked or never loaded, run the work unwrapped.
             // The ad path must never break the chat.
             if (!window.wavebird?.withTurn) {
               await work();
               return { slot, wrapped: false };
             }
-            await window.wavebird.withTurn({ target: slot, body }, work);
+            const input = { target: slot, body };
+            if (consent) input.authoritative_consent = consent;
+            await window.wavebird.withTurn(input, work);
             return { slot, wrapped: true };
           }, [slotId]);
         }

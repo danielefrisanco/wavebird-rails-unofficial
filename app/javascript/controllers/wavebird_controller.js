@@ -140,7 +140,29 @@ export default class extends Controller {
     if (this.hasModeValue) body.mode = this.modeValue;
     if (Object.keys(body).length > 0) input.body = body;
 
+    // Without this the renderer refuses the turn outright: `startTurn` checks
+    // `authoritative_consent` before it fetches anything and returns a null
+    // decision, so the endpoint is never called, no error is raised and nothing
+    // reaches the console. It reads this only from the turn options — unlike
+    // `renderPlacement`, which also accepts it from the placement payload — so
+    // it has to travel through the browser on this path.
+    const consent = this.#consent();
+    if (consent) input.authoritative_consent = consent;
+
     return wavebird.withTurn(input, work);
+  }
+
+  // The consent object the view helper serialised onto the slot. Malformed JSON
+  // is treated as absent rather than thrown: a broken consent config must cost
+  // the ad, never the host's chat turn.
+  #consent() {
+    const raw = this.element.dataset.wavebirdConsentValue;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
 
   // Load `/v1/render.js` at most once per page. render.js assigns

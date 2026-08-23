@@ -17,8 +17,8 @@ A–G, decisions #024–#029); this supersedes nothing in it.
 | | Item | State |
 |---|---|---|
 | 0 | Refresh the snapshot | ✔ **done** — `render-js-snapshot-2026-08-23.js`, old one kept |
-| **A** | Send `authoritative_consent` | **next — blocked on one decision** |
-| **B** | Make renderer drift detectable | **next, alongside A** |
+| **A** | Send `authoritative_consent` | ✔ **done 2026-08-23** (#030) — verified against the live renderer |
+| **B** | Make renderer drift detectable | **next** |
 | C | Close #023 (`click_url` now validated) | not started — recording only |
 | D | Record the legacy beacon route | not started — recording only |
 | E | `.env.test` placeholder | Daniele's |
@@ -28,17 +28,28 @@ RuboCop clean, YARD 100%): plan v2 complete through item D (#029), the examples'
 diagnostics fix, the refreshed snapshot, and this plan. **No gem code has changed
 in response to the finding yet.**
 
-**The one decision blocking A: where does the consent object come from?**
-Recommendation is `config.authoritative_consent`, a callable resolved per
-request — same convention as `secret_key` and `before_send_text` (#028). See the
-options under item A.
+**A is done** (#030). Daniele chose `config.authoritative_consent`, a callable
+resolved per slot render. The blocking path carries it through the browser
+(`data-wavebird-consent-value` → every documented JS path → `withTurn`); the
+async path carries it inside the placement payload and needed no JavaScript at
+all. `docs_turn_body_contract_spec` now guards all six documented turn-starts,
+checking the neighbourhood of the `withTurn` call with comments stripped —
+two weaker versions of that guard passed with the code deleted.
+
+**Verified against the live renderer, which is the only proof that counts here.**
+Before: `POST /wavebird/sponsor_slot` absent from the network trace. After: the
+request fires, the gem calls wavebird, and the status panel reports wavebird's
+own answer. The remaining `"Consent is not current"` is the **server-side**
+consent story (item E), not this gate.
 
 **Known-broken, deliberately visible:** `render_js_contract_spec` has a `pending`
 example asserting the stand-in tracks the newest snapshot. It fails today and is
 meant to. Remove the `pending` when B lands.
 
-**Do not release.** The gem installs, passes its gate, serves its endpoint, and
-never shows an ad.
+**Do not release yet.** The browser integration works again as of #030, but **B
+is still open**: the system suite still runs against a stand-in frozen at the old
+contract, so it cannot see the next change of this kind — and this one cost a day
+to find by hand.
 
 ---
 

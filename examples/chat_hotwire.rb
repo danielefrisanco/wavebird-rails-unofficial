@@ -80,6 +80,20 @@ Wavebird.configure do |config|
   config.client_id  = ENV.fetch("WAVEBIRD_CLIENT_ID", "")
   config.logger     = Logger.new($stdout)
   config.default_slot_hint = { position: "below", max_width: 728, max_height: 90 }
+
+  # **Required, or no ad is ever requested.** wavebird's hosted renderer gates
+  # every turn on this object and refuses silently without it -- no request, no
+  # error, nothing in the console. It is your consent management system's answer
+  # about this visitor, which is why only you can supply it; the gem never
+  # invents one. Resolved fresh on each slot render, so a withdrawal takes
+  # effect on the next turn.
+  #
+  # Hard-coded here because an example has no CMP. A real app reads its own
+  # consent record: `MyConsentStore.for(Current.session)`.
+  config.authoritative_consent = lambda do
+    { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }
+  end
+
   config.on_error = lambda { |error|
     warn("[wavebird] swallowed: #{error.class}: #{error.message}")
     Wavebird::ExampleDiagnostics.record(error)

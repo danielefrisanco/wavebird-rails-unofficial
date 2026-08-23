@@ -60,7 +60,18 @@ const body = {
 // does not send it silently gets the blocking path instead.
 if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
 
-window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
+// Required. wavebird's hosted renderer refuses the turn without this: it checks
+// authoritative_consent before fetching anything and returns a null decision, so
+// your endpoint is never called and nothing appears in the console. The view
+// helper serialises it from config.authoritative_consent onto the slot.
+const consent = slot.dataset.wavebirdConsentValue
+  ? JSON.parse(slot.dataset.wavebirdConsentValue)
+  : null;
+
+window.wavebird.withTurn(
+  { target: slot, body, authoritative_consent: consent },
+  () => sendChatMessage(message),
+);
 ```
 
 That is the whole integration. No importmap pins, no asset load path, no
@@ -89,7 +100,7 @@ never depend on the ad path:
 ```js
 const send = () => sendChatMessage(message);
 if (window.wavebird?.withTurn) {
-  window.wavebird.withTurn({ target: slot, body }, send);
+  window.wavebird.withTurn({ target: slot, body, authoritative_consent: consent }, send);
 } else {
   send();
 }
@@ -228,6 +239,58 @@ particular turn needs a body the controller does not build.
 
 ---
 
+## Consent — required, or no ad is ever requested
+
+wavebird's hosted renderer gates every turn on a consent object. Without a valid
+one it refuses **silently**: no request to your endpoint, no error, nothing in
+the console. The slot simply stays empty forever.
+
+```ruby
+# config/initializers/wavebird.rb
+Wavebird.configure do |config|
+  config.authoritative_consent = lambda do
+    record = MyConsentStore.for(Current.session)
+    {
+      lifecycle_state: record.granted? ? "granted" : "denied",
+      expires_at_ms: record.expires_at.to_i * 1000
+    }
+  end
+end
+```
+
+The callable is resolved **fresh on every slot render**, so the gem never stores
+consent and a visitor who withdraws it stops seeing ads on their next turn.
+
+| Field | Required | Notes |
+|---|---|---|
+| `lifecycle_state` | **yes** | only `"granted"` permits an auction |
+| `expires_at_ms` | **yes** | epoch milliseconds, must be in the future |
+| `revision` | no | defaults to `1` |
+| `updated_at_ms` | no | defaults to now |
+
+The two required fields are never defaulted, deliberately: they *are* the
+assertion, and inventing them would let the gem claim a consent nobody gave. The
+other two are bookkeeping the renderer checks but does not interpret.
+
+**A state other than `"granted"` is a normal answer,** not an error — the visitor
+declined, the slot stays empty, and nothing is logged. A *malformed* object is
+reported through `config.logger` every time, because the renderer would otherwise
+reject it in silence and you would have no ads and no explanation.
+
+**This is your assertion, not wavebird's verification.** The renderer's check is
+purely local: it makes no network call and the object is never sent to wavebird.
+It is your consent management system's answer about your visitor, which is why
+only you can supply it. Your project may *also* require consent recorded
+server-side via `POST /v1/consent` — see `record_consent` — which is a separate
+concern from this gate.
+
+The gem carries it from there: the view helper serialises it onto the slot as
+`data-wavebird-consent-value`, every documented JavaScript path reads it back and
+passes it into `withTurn`, and the async reveal carries it inside the placement
+payload (the renderer reads it from there, so async needs no JavaScript at all).
+
+---
+
 ## React
 
 **The gem ships no React code, and will not.** The seam a React app needs already
@@ -261,9 +324,18 @@ export function useWavebirdTurn(slotId = "wavebird-slot-below") {
 
     // If render.js was blocked or never loaded, run the work unwrapped. The ad
     // path must never break the chat.
+    // Required -- see "Consent" below. Without it the renderer refuses the turn
+    // and your endpoint is never called.
+    const consent = slot.dataset.wavebirdConsentValue
+      ? JSON.parse(slot.dataset.wavebirdConsentValue)
+      : null;
+
     if (!window.wavebird?.withTurn) return work();
 
-    return window.wavebird.withTurn({ target: slot, body }, work);
+    return window.wavebird.withTurn(
+      { target: slot, body, authoritative_consent: consent },
+      work,
+    );
   }, [slotId]);
 }
 ```
@@ -356,7 +428,18 @@ const body = {
 };
 if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
 
-window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
+// Required. wavebird's hosted renderer refuses the turn without this: it checks
+// authoritative_consent before fetching anything and returns a null decision, so
+// your endpoint is never called and nothing appears in the console. The view
+// helper serialises it from config.authoritative_consent onto the slot.
+const consent = slot.dataset.wavebirdConsentValue
+  ? JSON.parse(slot.dataset.wavebirdConsentValue)
+  : null;
+
+window.wavebird.withTurn(
+  { target: slot, body, authoritative_consent: consent },
+  () => sendChatMessage(message),
+);
 ```
 
 On the Stimulus path the controller reads the same attribute and builds the same

@@ -97,6 +97,18 @@ wavebird's canonical REST v1 API.
 
 #### Security
 
+- **`config.authoritative_consent` — required for any ad to be requested.**
+  wavebird's hosted renderer gates every turn (and every beacon) on a consent
+  object; without a valid one it returns a null decision without calling the
+  host's endpoint at all — no request, no error, nothing in the console. Set a
+  callable returning `lifecycle_state` and `expires_at_ms`; it is resolved fresh
+  on every slot render, so the gem never stores consent and a withdrawal takes
+  effect on the next turn. `revision` and `updated_at_ms` default. A state other
+  than `"granted"` is a normal answer and is silent; a malformed object is
+  reported through `logger` every time, since the renderer would otherwise reject
+  it silently. The check is local to the browser — the object is never sent to
+  wavebird — so this is the host's assertion, not wavebird's verification (#030).
+
 - `config.before_send_text` — an egress hook for filtering caller-supplied free
   text (today `topic:`) before it is sent, so a host can wire `data_redactor` or
   their own scrubber without monkey-patching. It receives **one value at a time**,

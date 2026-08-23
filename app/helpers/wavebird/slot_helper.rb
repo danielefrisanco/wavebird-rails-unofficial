@@ -92,13 +92,21 @@ module Wavebird
     # server-side on both ends from position + session id
     # ({SlotPayload.stream_name}); sending it to the browser and back would let a
     # client choose which stream the server broadcasts onto.
+    #
+    # +consent+ **is** here, and unlike the stream name it is safe: it is the
+    # host's own assertion about its own visitor, carries no credential, and the
+    # renderer only ever uses it as a local gate — it is never sent to wavebird.
+    # A page that tampered with it could only turn its own ads off, or claim a
+    # consent that changes nothing server-side.
     def wavebird_slot_data(endpoint:, session_id:, position:, async:)
+      consent = AuthoritativeConsent.resolve(Wavebird.configuration)
       {
         controller: "wavebird",
         wavebird_endpoint: endpoint,
         wavebird_session_id_value: session_id,
         wavebird_position_value: position,
-        wavebird_mode_value: ("async" if async)
+        wavebird_mode_value: ("async" if async),
+        wavebird_consent_value: (JSON.generate(consent) if consent)
       }.compact
     end
 

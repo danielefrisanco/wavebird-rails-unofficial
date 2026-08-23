@@ -3,6 +3,53 @@
 RSpec.describe Wavebird::SlotPayload do
   after { Wavebird.reset_configuration! }
 
+  # Plan v3 item A, and the half that needs no JavaScript at all. The hosted
+  # renderer's renderPlacement -- which the async reveal calls directly (#009) --
+  # resolves consent as `options.authoritative_consent || p.authoritative_consent`,
+  # so a payload carrying its own consent satisfies the gate without the
+  # broadcast threading anything through the browser.
+  describe "the consent carried in the payload" do
+    let(:future) { (Time.now.to_f * 1000).to_i + 60_000 }
+    let(:response) do
+      Wavebird::Types::PlacementResponse.from_api(
+        "status" => "ready",
+        "placement" => { "asset_token" => "at_secret",
+                         "render" => { "frame_url" => "https://api.wavebird.ai/v1/render/at_secret" } },
+        "decision" => { "fill" => true }
+      )
+    end
+
+    it "nests the consent inside the placement, where renderPlacement looks for it" do
+      Wavebird.configure do |c|
+        c.authoritative_consent = -> { { lifecycle_state: "granted", expires_at_ms: future } }
+      end
+
+      payload = described_class.call(response)
+
+      expect(payload[:placement][:authoritative_consent])
+        .to include(lifecycle_state: "granted", revision: 1)
+      # Beside the render block, not inside it: renderFrom reads p.render and
+      # would ignore anything buried there.
+      expect(payload[:placement][:render]).not_to have_key(:authoritative_consent)
+    end
+
+    it "leaves the payload untouched when no consent is configured" do
+      payload = described_class.call(response)
+
+      expect(payload[:placement]).not_to have_key(:authoritative_consent)
+      expect(payload[:fill]).to be(true)
+    end
+
+    it "does not attach consent to a no-fill" do
+      Wavebird.configure do |c|
+        c.authoritative_consent = -> { { lifecycle_state: "granted", expires_at_ms: future } }
+      end
+      empty = Wavebird::Types::PlacementResponse.from_api("status" => "no_fill", "placement" => nil)
+
+      expect(described_class.call(empty)).to eq(fill: false)
+    end
+  end
+
   describe "from a placement response (blocking path)" do
     let(:response) do
       Wavebird::Types::PlacementResponse.from_api(
