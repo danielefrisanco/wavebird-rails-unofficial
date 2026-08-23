@@ -346,7 +346,11 @@ module Wavebird
       rescue StandardError
         nil # observers must not break the ladder (upstream behavior)
       end
-      config.logger&.warn("[wavebird] #{error.class}: #{error.message}")
+      # detailed_message, not message: the API's `message` is often a generic
+      # "check the request body schema" while reason_code/hint/fields name the
+      # actual cause. A log line that omits them sends the reader guessing.
+      described = error.is_a?(Error) ? error.diagnostic_message : error.message
+      config.logger&.warn("[wavebird] #{error.class}: #{described}")
     end
 
     # -- request plumbing ----------------------------------------------------
@@ -436,7 +440,13 @@ module Wavebird
       klass = RateLimitedError if status == 429 && klass == APIError
       message = envelope["message"] || "HTTP request to #{path} failed with status #{status}."
       options = { code: code, request_id: envelope["request_id"] || headers["x-request-id"],
-                  docs_url: envelope["docs_url"], http_status: status }
+                  docs_url: envelope["docs_url"], http_status: status,
+                  # Undocumented but frequently the only actionable part of the
+                  # response: `message` is often a generic "check the request
+                  # body schema" while `reason_code` names the actual cause.
+                  reason_code: envelope["reason_code"], hint: envelope["hint"],
+                  expected_shape: envelope["expected_shape"],
+                  fields: envelope["fields"].is_a?(Array) ? envelope["fields"] : nil }
       options[:retry_after] = parse_retry_after(headers["retry-after"]) if klass == RateLimitedError
       klass.new(message, **options)
     end

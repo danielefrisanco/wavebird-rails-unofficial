@@ -63,6 +63,12 @@ wavebird's canonical REST v1 API.
   clamping mirroring the upstream SDK (`timeout_ms`, `decision_timeout_ms`,
   `long_poll_wait_ms`, `short_poll_interval_ms`), HTTPS-except-localhost base URL
   validation, callable secret keys, and secret redaction in `inspect`.
+- Errors keep the API's **diagnostic** envelope fields — `reason_code`, `hint`,
+  `expected_shape` and `fields` — alongside the documented ones.
+  `#diagnostic_message` renders them together, and is what `on_error` and the
+  gem's logging use. wavebird does not document these, but a 400 whose `message`
+  says only "check the request body schema" routinely carries a `reason_code`
+  that names the cause exactly (#032).
 - `Wavebird::Error` hierarchy — typed exceptions per API error code
   (`unauthorized`, `forbidden`, `rate_limited` with `retry_after`,
   `validation_error`, `not_found`), transport errors, and

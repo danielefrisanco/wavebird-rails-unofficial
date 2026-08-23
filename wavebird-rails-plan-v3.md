@@ -19,14 +19,19 @@ A–G, decisions #024–#029); this supersedes nothing in it.
 | 0 | Refresh the snapshot | ✔ **done** — `render-js-snapshot-2026-08-23.js`, old one kept |
 | **A** | Send `authoritative_consent` | ✔ **done 2026-08-23** (#030) — verified against the live renderer |
 | **B** | Make renderer drift detectable | ✔ **done 2026-08-23** (#031) |
-| C | Close #023 (`click_url` now validated) | not started — recording only |
-| D | Record the legacy beacon route | not started — recording only |
+| C | Close #023 (`click_url` now validated) | ✔ **done 2026-08-23** (#033) |
+| D | Record the legacy beacon route | ✔ **done 2026-08-23** — `docs/parity.md` |
 | E | `.env.test` placeholder | Daniele's |
 
-**Merged to `main` and green** (473 unit / 0 failures / 1 pending, 27 system,
-RuboCop clean, YARD 100%): plan v2 complete through item D (#029), the examples'
-diagnostics fix, the refreshed snapshot, and this plan. **No gem code has changed
-in response to the finding yet.**
+**Every item is done.** A (#030) restored the browser integration, B (#031) makes
+the next change of this kind detectable, C (#033) and D are recorded. E is
+Daniele's and is not a gem concern.
+
+**One decision came out of the investigation rather than the plan:** #032 keeps
+the API's `reason_code`, `hint`, `expected_shape` and `fields`, which the gem was
+discarding. Everything diagnosed in item E below was read from fields that had
+been thrown away — the sandbox debugging that produced this plan took a dozen
+probes for information that was in the first response.
 
 **A is done** (#030). Daniele chose `config.authoritative_consent`, a callable
 resolved per slot render. The blocking path carries it through the browser
