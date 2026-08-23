@@ -123,8 +123,11 @@ module Wavebird
                // serves the blocking path instead.
                if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
 
+               const consent = slot.dataset.wavebirdConsentValue
+                 ? JSON.parse(slot.dataset.wavebirdConsentValue)
+                 : null;
                if (window.wavebird?.withTurn) {
-                 window.wavebird.withTurn({ target: slot, body }, send);
+                 window.wavebird.withTurn({ target: slot, body, authoritative_consent: consent }, send);
                } else {
                  send();
                }

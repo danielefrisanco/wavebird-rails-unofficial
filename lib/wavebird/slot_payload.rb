@@ -136,7 +136,29 @@ module Wavebird
       frame_url = present_string(render_info&.frame_url)
       return no_fill if frame_url.nil?
 
-      { fill: true, placement: { render: passthrough_render(render_info, frame_url) } }
+      { fill: true, placement: with_consent(render: passthrough_render(render_info, frame_url)) }
+    end
+
+    # Attaches the host's consent assertion to the placement.
+    #
+    # This is what makes **async delivery work with no JavaScript change at
+    # all.** The hosted renderer's +renderPlacement+ — which the async reveal
+    # calls directly (#009) — resolves consent as
+    #
+    #   options.authoritative_consent || p.authoritative_consent
+    #
+    # where +p+ is this placement. So a payload that carries its own consent
+    # satisfies the gate without the broadcast having to thread anything through
+    # the browser. +startTurn+ has no such fallback and reads only its turn
+    # options, which is why the blocking path still passes it in JS; that
+    # asymmetry is upstream's, not ours.
+    #
+    # Resolved at broadcast time rather than reused from the request that started
+    # the turn: an async decision can arrive seconds later, and consent the
+    # visitor has since withdrawn must not be asserted on their behalf.
+    def with_consent(placement)
+      consent = AuthoritativeConsent.resolve(Wavebird.configuration)
+      consent ? placement.merge(authoritative_consent: consent) : placement
     end
 
     # The API's own render block, browser-safe fields only, with the frame URL
@@ -161,7 +183,7 @@ module Wavebird
       frame_url = frame_url_for(decision.asset_token)
       return no_fill if frame_url.nil?
 
-      { fill: true, placement: { render: decision_render(decision, frame_url) } }
+      { fill: true, placement: with_consent(render: decision_render(decision, frame_url)) }
     end
 
     # The render block the render script would have built for itself from the

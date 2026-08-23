@@ -94,6 +94,10 @@ RSpec.shared_context "with the dummy chat app" do
       c.secret_key = "sk_test_system_spec"
       c.client_id = "wbproj_system_spec"
       c.api_base_url = api_base_url
+      # Every host needs this or the hosted renderer refuses every turn (#030).
+      # Configured here rather than in the dummy app so a spec can override or
+      # remove it to exercise the gate itself.
+      c.authoritative_consent = -> { system_spec_consent }
     end
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear
     ActiveJob::Base.queue_adapter.performed_jobs.clear
@@ -102,6 +106,12 @@ RSpec.shared_context "with the dummy chat app" do
   after do
     Wavebird.reset_configuration!
     Capybara.reset_sessions!
+  end
+
+  # A grant the renderer accepts: `granted`, revision >= 1, and an expiry far
+  # enough out that a slow suite cannot age past it.
+  def system_spec_consent
+    { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }
   end
 
   # Base URL of the Capybara-served dummy app; also the configured

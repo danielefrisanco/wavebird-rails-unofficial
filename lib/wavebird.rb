@@ -2,6 +2,7 @@
 
 require_relative "wavebird/version"
 require_relative "wavebird/deprecation"
+require_relative "wavebird/authoritative_consent"
 require_relative "wavebird/errors"
 require_relative "wavebird/boot_check"
 require_relative "wavebird/configuration"

@@ -93,6 +93,33 @@ module Wavebird
     # @return [#call, nil]
     attr_accessor :before_send_text
 
+    # The consent object wavebird's hosted renderer requires before it will run
+    # a turn. **Without this, no ad is ever requested** — the renderer refuses
+    # every turn silently, with no request and no error.
+    #
+    # Set a callable; it is resolved fresh on every slot render, so the gem never
+    # stores consent and a visitor's answer can change between turns:
+    #
+    #   config.authoritative_consent = lambda do
+    #     record = MyConsentStore.for(Current.session)
+    #     { lifecycle_state: record.granted? ? "granted" : "denied",
+    #       expires_at_ms: record.expires_at.to_i * 1000 }
+    #   end
+    #
+    # Only +lifecycle_state+ and +expires_at_ms+ are required. +revision+
+    # (default +1+) and +updated_at_ms+ (default: now) are bookkeeping the
+    # renderer checks but does not interpret, and are filled in when omitted.
+    # The two required fields are never defaulted: they are the assertion
+    # itself, and inventing them would claim a consent nobody gave.
+    #
+    # A state other than +"granted"+ is a normal answer — the slot stays empty.
+    # A malformed object is reported through {#logger}, because the renderer
+    # would otherwise reject it in silence.
+    #
+    # @return [#call, Hash, nil]
+    # @see AuthoritativeConsent
+    attr_accessor :authoritative_consent
+
     # @return [Logger, nil] logger for diagnostics; all logging redacts
     #   +secret_key+ and +asset_token+
     attr_accessor :logger

@@ -106,7 +106,18 @@ const body = {
 // from the body, so omitting it silently serves the blocking path.
 if (slot.dataset.wavebirdModeValue) body.mode = slot.dataset.wavebirdModeValue;
 
-window.wavebird.withTurn({ target: slot, body }, () => sendChatMessage(message));
+window.wavebird.withTurn(
+  {
+    target: slot,
+    body,
+    // Required: the hosted renderer refuses the turn without it. Serialised
+    // onto the slot from config.authoritative_consent -- see INSTALL.md.
+    authoritative_consent: slot.dataset.wavebirdConsentValue
+      ? JSON.parse(slot.dataset.wavebirdConsentValue)
+      : null,
+  },
+  () => sendChatMessage(message),
+);
 ```
 
 `withTurn` requests a placement for the turn while your AI answer generates. On a

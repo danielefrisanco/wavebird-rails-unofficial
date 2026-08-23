@@ -12,6 +12,36 @@ RSpec.describe Wavebird::SlotHelper do
 
   after { Wavebird.reset_configuration! }
 
+  # Plan v3 item A. Without this attribute the hosted renderer refuses the turn
+  # outright -- no request to the endpoint, no error, nothing in the console --
+  # which is exactly how the gem shipped a browser integration that could not
+  # run. The Stimulus controller and the documented plain-JS path both read it
+  # from here.
+  describe "the consent the hosted renderer requires" do
+    let(:future) { (Time.now.to_f * 1000).to_i + 60_000 }
+
+    it "serialises the resolved consent onto the slot" do
+      Wavebird.configure do |c|
+        c.authoritative_consent = -> { { lifecycle_state: "granted", expires_at_ms: future } }
+      end
+
+      html = view.wavebird_slot(endpoint: "/wavebird/sponsor_slot", session_id: "sess_1")
+      raw = html[/data-wavebird-consent-value="([^"]*)"/, 1]
+
+      expect(raw).not_to be_nil, "the slot carries no consent, so the renderer will refuse every turn"
+      expect(JSON.parse(CGI.unescapeHTML(raw))).to include("lifecycle_state" => "granted", "revision" => 1)
+    end
+
+    it "omits the attribute entirely when no consent is configured" do
+      html = view.wavebird_slot(endpoint: "/wavebird/sponsor_slot", session_id: "sess_1")
+
+      # Absent rather than empty: the renderer treats a malformed object and a
+      # missing one identically, and an empty attribute would suggest the host
+      # had configured something.
+      expect(html).not_to include("data-wavebird-consent-value")
+    end
+  end
+
   describe "#wavebird_render_script_tag" do
     it "emits a script tag pointing at the configured render.js" do
       html = view.wavebird_render_script_tag

@@ -25,6 +25,62 @@ end
 
 RuboCop::RakeTask.new
 
+# Deliberately not a diff: what matters is that it moved. The renderer is served,
+# not versioned -- no version to pin, and the public changelog did not mention the
+# change that broke the gem (plan v3) -- so refetching is the only defence.
+def render_js_drift_message(snapshot, stored_bytes, live_bytes)
+  <<~MSG
+    wavebird's hosted render.js has CHANGED since #{File.basename(snapshot)}.
+
+      snapshot: #{stored_bytes} bytes
+      live:     #{live_bytes} bytes
+
+    Save it as docs/upstream/render-js-snapshot-<today>.js, keep the old one, and
+    run the suite: render_js_contract_spec compares the gates the live renderer
+    enforces against the ones the test stand-in implements, and will name any new
+    precondition the gem does not satisfy.
+
+    Do not skip this. A gate added upstream makes every turn fail silently --
+    no request, no error, nothing in the console.
+  MSG
+end
+
+# The snapshot carries a provenance header the served file does not, so compare
+# only the payload. Read binary: the served file contains a NUL byte, which also
+# makes grep treat it as binary and report nothing.
+def snapshot_payload(path)
+  File.read(path, encoding: "BINARY").sub(%r{\A(?://[^\n]*\n)+}, "")
+end
+
+desc "Refetch wavebird's hosted render.js and report whether our snapshot is stale"
+task :render_js_drift do
+  require "net/http"
+  require "digest"
+
+  url = URI("https://api.wavebird.ai/v1/render.js")
+  snapshot = Dir.glob("docs/upstream/render-js-snapshot-*.js").max
+  abort("no render.js snapshot in docs/upstream/") if snapshot.nil?
+
+  live = begin
+    Net::HTTP.get_response(url).body
+  rescue StandardError => e
+    abort("could not fetch #{url}: #{e.class}: #{e.message}")
+  end
+
+  stored = snapshot_payload(snapshot)
+
+  if stored == live.dup.force_encoding("BINARY")
+    puts "render.js unchanged since #{File.basename(snapshot)} (#{live.bytesize} bytes)"
+    next
+  end
+
+  # Deliberately not a diff: what matters is that it moved. The renderer is
+  # served, not versioned -- no version to pin, and the public changelog did not
+  # mention the change that broke the gem (plan v3), so refetching is the only
+  # defence. Refresh the snapshot and let render_js_contract_spec say what broke.
+  abort(render_js_drift_message(snapshot, stored.bytesize, live.bytesize))
+end
+
 desc "Fail unless every public API object carries YARD documentation"
 task :yard_coverage do
   require "open3"

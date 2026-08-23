@@ -57,6 +57,17 @@ WAVEBIRD_RESOLUTION_PATH = {
     "var p=placementFrom(options);var r=renderFrom(p)"
 }.freeze
 
+# Gates the stand-in deliberately does not implement, each with the reason. The
+# allowlist is the point: a gate that turns up in the snapshot and is *not* here
+# fails the drift check, so skipping one has to be a decision someone wrote down
+# rather than an omission nobody noticed.
+UNIMPLEMENTED_GATES = {
+  # Guards sendRenderBeacon. The stand-in has no beacons at all (#012a): they
+  # post to a blocked host and are the renderer's own concern, not part of the
+  # surface this gem drives. With nothing to guard, the guard has no meaning.
+  "isRenderActive" => "the stand-in sends no beacons"
+}.freeze
+
 RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:disable RSpec/DescribeClass
   # The surface the gem actually drives: the Stimulus controller calls withTurn
   # (both host entry points, decision #008) and renderPlacement/clearPlacement
@@ -80,6 +91,13 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
   # investigation.
   def snapshot
     File.read(snapshot_path, encoding: "BINARY").force_encoding("UTF-8").scrub
+  end
+
+  # Helpers the snapshot negates inside a guard — `if(!consentAllowsAdActivity(`,
+  # `if(!p||!p.render)`. Restricted to camelCase names so the scan picks up the
+  # renderer's own predicates rather than every negated local variable.
+  def snapshot_guards
+    snapshot.scan(/if\s*\(\s*!\s*([a-z][A-Za-z]+)\s*\(/).flatten.uniq
   end
 
   def tracked_snapshot_path
@@ -169,12 +187,30 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
     # already replaced. The names of the entry points do not change when this
     # happens -- the preconditions do -- which is why nothing else here fires.
     it "tracks the newest snapshot, or the system suite is testing a dead contract" do
-      pending "plan v3 item B: the stand-in predates the authoritative_consent gate " \
-              "added to render.js on 2026-08-23. Until it is regenerated from the " \
-              "current snapshot, the 27 system examples prove nothing about the live " \
-              "renderer. This is expected to fail; remove the `pending` when B lands."
-
       expect(File.basename(tracked_snapshot_path)).to eq(File.basename(snapshot_path))
+    end
+
+    # The guard that did not exist, and the reason the gem shipped a browser
+    # integration that could not run. Entry-point *names* survive a vendor
+    # change; preconditions do not. wavebird added a consent gate on 2026-08-23,
+    # this stand-in did not have it, and 27 green system examples said nothing.
+    #
+    # Every helper the snapshot calls inside an `if(!...)` is a way the real
+    # renderer declines to act. A stand-in missing one lets the suite pass on a
+    # turn the real script would refuse, so the set is compared rather than
+    # spot-checked: a gate added upstream fails here by appearing in the diff,
+    # without anyone having to predict what it will be called.
+    it "enforces every gate the upstream snapshot enforces" do
+      # Definitions, not mentions: scanning for calls matched the guard's own
+      # call sites, so deleting the function body from the stand-in still passed.
+      implemented = File.read(stand_in_path).scan(/function\s+(\w+)\s*\(/).flatten.uniq
+      missing = snapshot_guards - implemented - UNIMPLEMENTED_GATES.keys
+
+      expect(missing).to be_empty,
+                         "upstream render.js refuses a turn via #{missing.join(', ')}, which the " \
+                         "stand-in does not implement. Until it does, the system specs exercise a " \
+                         "contract the live renderer has already replaced — the exact failure that " \
+                         "produced plan v3."
     end
 
     # The stand-in must resolve payloads the way upstream does, not the way the
@@ -186,7 +222,12 @@ RSpec.describe "hosted render.js contract", :aggregate_failures do # rubocop:dis
 
       expect(source).to include("function placementFrom(")
       expect(source).to include("function renderFrom(")
-      expect(source).to include("renderFrom(placementFrom(")
+      # Either spelling of the same composition: inlined, or via a named local
+      # (renderPlacement needs the placement itself as well, to read the consent
+      # it may carry, so it names it).
+      expect(source).to match(/renderFrom\(\s*(placementFrom\(|placement\b)/),
+                        "the stand-in no longer resolves a render from placementFrom's result, " \
+                        "so it is reading some other shape than the one upstream reads"
     end
   end
 
