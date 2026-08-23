@@ -74,6 +74,14 @@ caller bug rather than a wavebird failure.
 | `createDecisionWsTicket` + `getDecisionViaWebSocket` (private) | wrapper WS ticket + per-slot socket | not ported in v1 | #001 (approved; deferred todo) |
 | `sendLegacyBeacon` (private) | `/public/wrapper/v1/beacons` | not ported | legacy transport |
 
+**The hosted renderer beacons on the legacy route, verified 2026-08-23.**
+`sendRenderBeacon` in `render.js` posts to **`/public/wrapper/v1/beacons`** with
+`contract_version: "csl_wrapper_beacon/v1"` — not the canonical `/v1/beacons`
+this client uses. It does not affect the gem, which never beacons from the
+browser (the renderer does its own), but it is direct evidence about where
+wavebird's own canonical/legacy boundary actually sits, which #024 and #025
+reason about. Read from `render-js-snapshot-2026-08-23.js`.
+
 **Three different beacon vocabularies, verified 2026-08-11.** Easy to mistake for
 a parity gap, so stated explicitly:
 
