@@ -1,7 +1,18 @@
-# wavebird-rails
+# wavebird-rails-unofficial
 
+> **Unofficial.** Not built, endorsed, or supported by wavebird. It is an
+> independent Ruby/Rails port of their public TypeScript SDK, by a third party.
+> For anything official, go to [wavebird.ai/api](https://wavebird.ai/api).
+>
 > **Status: pre-release, under active development.** Nothing here is published
 > to RubyGems yet; the public API is not stable.
+
+Install as `wavebird-rails-unofficial`; require it as `wavebird-rails`:
+
+```ruby
+# Gemfile
+gem "wavebird-rails-unofficial", require: "wavebird-rails"
+```
 
 Server-side API client and Hotwire integration for
 [wavebird](https://wavebird.ai) — "Compute Sponsoring" ad infrastructure for

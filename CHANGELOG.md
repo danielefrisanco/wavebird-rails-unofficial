@@ -170,5 +170,5 @@ wavebird's canonical REST v1 API.
 - `docs/parity.md` (field-by-field parity with the TypeScript SDK) and
   `docs/DECISIONS.md` (the ported-behavior decisions and their rationale).
 
-[Unreleased]: https://github.com/danielefrisanco/wavebird-rails/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/danielefrisanco/wavebird-rails/releases/tag/v0.1.0
+[Unreleased]: https://github.com/danielefrisanco/wavebird-rails-unofficial/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/danielefrisanco/wavebird-rails-unofficial/releases/tag/v0.1.0
