@@ -35,7 +35,12 @@ group :development, :test do
   gem "rake", "~> 13.2"
   gem "rspec", "~> 3.13"
   gem "rspec-rails", "~> 7.1"
-  gem "rubocop", "~> 1.75", require: false
+  # >= 1.90: the codebase uses `# rubocop:disable-next`, and `.rubocop.yml` sets
+  # NewCops: enable. Together those mean a resolver free to pick an older RuboCop
+  # can flag code a newer one accepts, and vice versa -- which is exactly how the
+  # first CI run failed on a tree that was green locally (local 1.88.2, CI 1.90.0,
+  # new cop Style/DirectiveScope). Floor it so local and CI agree.
+  gem "rubocop", "~> 1.90", require: false
   gem "rubocop-rake", "~> 0.7", require: false
   gem "rubocop-rspec", "~> 3.6", require: false
   gem "selenium-webdriver", "~> 4.27"

@@ -211,7 +211,7 @@ class ChatsController < ActionController::Base
   end
 end
 
-# rubocop:disable Style/RedundantHeredocDelimiterQuotes
+# rubocop:disable-next Style/RedundantHeredocDelimiterQuotes
 TEMPLATE = <<~'ERB'
   <!doctype html>
   <html lang="en">
@@ -405,7 +405,6 @@ TEMPLATE = <<~'ERB'
     </body>
   </html>
 ERB
-# rubocop:enable Style/RedundantHeredocDelimiterQuotes
 
 port = ENV.fetch("PORT", 3000).to_i
 puts "\n  wavebird-rails — chat WITH Hotwire -> http://localhost:#{port}"

@@ -223,14 +223,13 @@ module Wavebird
     # @param error [String, nil]
     # @return [true]
     # @raise [ArgumentError] for an unknown event (it forms the URL path)
-    # rubocop:disable Naming/PredicateMethod -- +true+ is a fire-and-forget ack, not a predicate
+    # rubocop:disable-next Naming/PredicateMethod -- +true+ is a fire-and-forget ack, not a predicate
     def report_generation(job_id, event, generation_id: nil, model_id: nil, usage_json: nil, error: nil)
       event = validate_enum!(event, GENERATION_EVENTS, "event")
       body = compact(generation_id: generation_id, model_id: model_id, usage_json: usage_json, error: error)
       request(:post, "/v1/jobs/#{encode(job_id)}/generation/#{event}", body: body)
       true
     end
-    # rubocop:enable Naming/PredicateMethod
 
     # Syncs session/user-level consent — +POST /v1/consent+ (optional; the
     # per-request +consent+ object in {#create_placement} does not depend on it).
