@@ -214,7 +214,7 @@ end
 # The heredoc delimiter quotes are load-bearing: the template contains `<%# … %>`
 # ERB comments, and in an interpolating heredoc `<%#{...}` parses as Ruby
 # interpolation, silently turning a comment into an open `<% %>` tag.
-# rubocop:disable Style/RedundantHeredocDelimiterQuotes
+# rubocop:disable-next Style/RedundantHeredocDelimiterQuotes
 TEMPLATE = <<~'ERB'
   <!doctype html>
   <html lang="en">
@@ -417,7 +417,6 @@ TEMPLATE = <<~'ERB'
     </body>
   </html>
 ERB
-# rubocop:enable Style/RedundantHeredocDelimiterQuotes
 
 port = ENV.fetch("PORT", 3000).to_i
 puts "\n  wavebird-rails — chat WITHOUT Hotwire -> http://localhost:#{port}"
