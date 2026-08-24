@@ -1,0 +1,89 @@
+const requestBody = {
+  "client_id": "wbproj_your_client_id",
+  "session_id": "sess_demo_123",
+  "job_type": "chat",
+  "locale": "en-US",
+  "slots_requested": 1,
+  "prompt": {
+    "topic": "assistant reply",
+    "text": "Can you summarize the best option for my project?"
+  },
+  "slot_hint": {
+    "position": "below",
+    "max_width": 320,
+    "max_height": 50
+  },
+  "overrides": {
+    "allowed_formats": [
+      "native",
+      "banner"
+    ],
+    "timing": "before",
+    "bidfloor": 0.5,
+    "bidfloor_currency": "EUR",
+    "gdpr_applies": true,
+    "publisher": {
+      "app_name": "danielefrisanco.github.io",
+      "app_domain": "danielefrisanco.github.io",
+      "categories": [
+        "IAB19"
+      ]
+    },
+    "frequency_cap": {
+      "session": 1,
+      "prompt_interval": 1,
+      "user_per_day": 10
+    },
+    "targeting": {
+      "countries": [],
+      "regions": [],
+      "cities": [],
+      "device_types": [
+        "desktop",
+        "mobile",
+        "tablet"
+      ],
+      "os": [],
+      "browsers": []
+    },
+    "bidfloors": {
+      "default": 0.5
+    }
+  },
+  "consent": {
+    "semantic_targeting": true,
+    "prompt_shared": true,
+    "gdpr_applies": true,
+    "consent_source": "wavebird_consent"
+  }
+};
+
+const decisionResponse = await fetch("https://api.wavebird.ai/v1/placements?wait_ms=1500", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.WAVEBIRD_SECRET_KEY ?? ""}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(requestBody),
+});
+
+const decision = await decisionResponse.json();
+
+
+
+
+
+<script
+  src="https://wavebird.ai/wavebird.js"
+  data-client-id="wbproj_your_client_id"
+  data-publishable-key="pk_test_your_publishable_key"
+  data-job-type="chat"
+  data-native-template="default"
+></script>
+<div
+  data-wavebird-slot
+  data-wavebird-formats="native,banner"
+  data-wavebird-position="between"
+  data-wavebird-max-width="728"
+  data-wavebird-max-height="250"
+></div>

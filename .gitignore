@@ -1,4 +1,8 @@
-upstream/
+# Anchored: a bare `upstream/` matches ANY directory of that name, which
+# silently excluded docs/upstream/ -- the dated API and render.js snapshots
+# that render_js_contract_spec reads. A fresh clone had none of them and
+# failed 12 examples; CI would have failed on the first push.
+/upstream/
 
 # local env files
 .env*

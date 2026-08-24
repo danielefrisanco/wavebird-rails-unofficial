@@ -1,9 +1,17 @@
 # Parity table — wavebird TS SDK v0.1.5 → wavebird-rails
 
-Source of truth: `upstream/wavebird/` clone (gitignored) + public API docs
-(snapshots in `docs/upstream/`, gitignored). Verified 2026-07-18 against source,
-not from the build prompt. Decisions requiring approval reference
-`docs/DECISIONS.md`.
+Source of truth: the `upstream/wavebird/` clone (gitignored — fetch it yourself)
+plus **committed, dated snapshots in `docs/upstream/`**. Those are checked in
+deliberately: `render_js_contract_spec` reads them, so a clone without them has
+no contract to check against.
+
+Verified against source, not the build prompt: the table was built 2026-07-18 and
+re-verified 2026-08-11 (#024, #025) and 2026-08-23 against
+`render-js-snapshot-2026-08-23.js`. **The hosted renderer is served, not
+versioned** — it changed under this gem once without a changelog entry
+(plan v3), so anything here derived from a snapshot is true as of that
+snapshot's date. `rake render_js_drift` refetches and fails if it has moved.
+Decisions requiring approval reference `docs/DECISIONS.md`.
 
 **Framing fact (verified in `src/index.ts` + API changelog):** the npm SDK
 warns at import that it is now an *advanced compatibility layer*; wavebird's
@@ -104,6 +112,15 @@ mapper only translates *from* its legacy set, so it could never emit a
 canonical-only event even if one exists. Unverifiable against the SDK by
 construction; accepting it is the tolerant choice, since rejecting a real
 canonical event would be the worse error.
+
+**Surface with no upstream counterpart.** Two configuration options exist here
+that the TS SDK has nothing equivalent to, both recorded as additions rather than
+divergences:
+
+| Ours | Why upstream has none | Decision |
+|---|---|---|
+| `config.authoritative_consent` | Upstream is a Node server library; it never drives the hosted renderer, so it never meets the renderer's client-side consent gate. This gem does, and without it every turn is refused silently | #030 |
+| `config.before_send_text` | Upstream's caller *is* the host, so redaction happens at the call site. Here the engine endpoint's caller is `SponsorSlotsController` inside the gem, and a host has no call site to redact at | #028 |
 
 **Legacy-only request fields, not exposed by this client.** Upstream's
 `createV1JobRequest` treats several `JobRequest` fields as signals to *leave* the
