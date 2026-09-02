@@ -105,9 +105,15 @@ Wavebird.configure do |config|
   #
   # Hard-coded here because an example has no CMP. A real app reads its own
   # consent record: `MyConsentStore.for(Current.session)`.
-  config.authoritative_consent = lambda do
-    { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }
-  end
+  #
+  # Computed **once**, not per call. The renderer compares the consent it gets in
+  # the turn options against the one on the placement payload and discards the
+  # render if the payload's looks newer -- so a resolver that returns a slightly
+  # different object each time makes the gem's own two resolutions disagree, and
+  # a filled slot stays hidden. A real app reads a stored consent record, which
+  # is stable by nature; an example computing timestamps has to be careful.
+  consent = { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }.freeze
+  config.authoritative_consent = -> { consent }
 
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
@@ -382,6 +388,22 @@ TEMPLATE = <<~'ERB'
           }, [slotId]);
         }
 
+        // The renderer clears the slot when the turn finishes (finishTurn waits out
+        // require_viewability_ms, default 1000ms, then calls clearPlacement), so
+        // inspecting `slot.hidden` *after* the turn always reports "empty" -- even
+        // for an ad that rendered perfectly. Watch instead, and remember.
+        let adRendered = false;
+        (() => {
+          const watched = document.getElementById("wavebird-slot-below");
+          if (!watched) return;
+          new MutationObserver(() => {
+            if (watched.querySelector("iframe") ||
+                watched.getAttribute("data-wavebird-status") === "rendered") {
+              adRendered = true;
+            }
+          }).observe(watched, { childList: true, subtree: true, attributes: true });
+        })();
+
         // Example-only endpoint; see Wavebird::ExampleDiagnostics. A real app
         // sends on_error to its error tracker, never to the browser.
         async function slotReason() {
@@ -439,11 +461,13 @@ TEMPLATE = <<~'ERB'
             // causes look the same from here -- an honest no-fill, a missing
             // key, and a request wavebird rejected -- so ask the server which it
             // was rather than guessing in the copy.
-            const filled = slot.hidden === false;
             setStatus([
               `<b>render.js</b> ${wrapped ? "loaded" : "not loaded — turn ran unwrapped"}`,
               "<b>turn</b> finished, answer delivered",
-              filled ? "<b>slot</b> filled — wavebird returned a placement" : await slotReason(),
+              adRendered
+                ? "<b>slot</b> <b>filled and rendered</b> — the ad was shown for this turn, then " +
+                "cleared by the renderer, which is its normal lifecycle"
+                : await slotReason(),
             ]);
             setBusy(false);
           }, [draft, withWavebirdTurn, setStatus]);
