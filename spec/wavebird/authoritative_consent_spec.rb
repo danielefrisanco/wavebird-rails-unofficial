@@ -32,7 +32,7 @@ RSpec.describe Wavebird::AuthoritativeConsent do
 
     it "fills in the bookkeeping fields the renderer checks but does not interpret" do
       expect(resolved).to eq(lifecycle_state: "granted", revision: 1,
-                             updated_at_ms: now_ms, expires_at_ms: now_ms + 60_000)
+                             updated_at_ms: 0, expires_at_ms: now_ms + 60_000)
     end
 
     it "accepts a plain hash as well as a callable" do
@@ -153,9 +153,36 @@ RSpec.describe Wavebird::AuthoritativeConsent do
     expect { described_class.resolve(config, now_ms: now_ms) }.not_to raise_error
   end
 
-  it "defaults updated_at_ms from the real clock when none is injected" do
-    config.authoritative_consent = -> { valid.merge(expires_at_ms: (Time.now.to_f * 1000).to_i + 60_000) }
+  # The bug this pins cost a real fill: the gem resolves consent twice for one
+  # turn -- the view helper's copy, which the browser passes to withTurn, and
+  # SlotPayload's, which the renderer reads off the placement. The renderer
+  # compares them and discards the render when the response's looks newer
+  # (selectAuthoritativeConsent). Defaulting updated_at_ms to "now" made the two
+  # differ by the request duration, so the gem's own payload made the gem's own
+  # turn consent look stale and a filled slot stayed hidden.
+  describe "stability across resolutions" do
+    it "produces an identical object every time, for unchanged consent" do
+      config.authoritative_consent = -> { { lifecycle_state: "granted", expires_at_ms: 1_800_000_000_000 } }
 
-    expect(described_class.resolve(config)[:updated_at_ms]).to be_within(5_000).of((Time.now.to_f * 1000).to_i)
+      first = described_class.resolve(config)
+      sleep 0.01
+      second = described_class.resolve(config)
+
+      expect(first).to eq(second)
+    end
+
+    it "defaults updated_at_ms to a constant, never to the clock" do
+      config.authoritative_consent = -> { { lifecycle_state: "granted", expires_at_ms: 1_800_000_000_000 } }
+
+      # Any wall-clock default makes the later resolution look newer than the
+      # earlier one, which is precisely what the renderer rejects.
+      expect(described_class.resolve(config)[:updated_at_ms]).to eq(0)
+    end
+
+    it "still honours a host-supplied updated_at_ms" do
+      config.authoritative_consent = -> { valid.merge(updated_at_ms: 1_700_000_000_000) }
+
+      expect(resolved[:updated_at_ms]).to eq(1_700_000_000_000)
+    end
   end
 end

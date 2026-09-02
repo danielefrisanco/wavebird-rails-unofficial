@@ -35,6 +35,25 @@ module Wavebird
     # is a valid answer — it means "do not run an auction" — not an error.
     GRANTED = "granted"
 
+    # Filled in when the host omits them. **+updated_at_ms+ defaults to 0, not to
+    # the current time**, and that is load-bearing.
+    #
+    # The gem resolves consent twice for one turn — once in the view helper, for
+    # the browser to pass to +withTurn+, and once in {SlotPayload}, for the
+    # renderer to read off the placement. The renderer compares them
+    # (+selectAuthoritativeConsent+, added 2026-09-02) and **discards the render
+    # if the response's consent looks newer**:
+    #
+    #   if (current.updated_at_ms < response.updated_at_ms) return null;
+    #
+    # Defaulting to "now" made those two resolutions differ by however long the
+    # request took, so the gem's own payload made the gem's own turn consent look
+    # stale and the slot stayed empty on a fill. Observed as a 2.4 s gap against
+    # the live renderer. A constant keeps two resolutions of unchanged consent
+    # identical; a host that tracks real revisions supplies its own values, and
+    # then the comparison does what upstream intends.
+    DEFAULTS = { revision: 1, updated_at_ms: 0 }.freeze
+
     # Mirrors +consentAllowsAdActivity+ in the hosted renderer
     # (+render-js-snapshot-2026-08-23.js+). Every rule here exists because the
     # renderer enforces it; loosening any of them produces an object the renderer
@@ -44,7 +63,8 @@ module Wavebird
     module_function
 
     # @param config [Configuration]
-    # @param now_ms [Integer] injectable clock, so expiry is testable
+    # @param now_ms [Integer] injectable clock, used only to reject an expiry in
+    #   the past — never to fill in a default, see {DEFAULTS}
     # @return [Hash, nil] a hash the renderer will accept, or nil
     def resolve(config, now_ms: current_time_ms)
       source = config.authoritative_consent
@@ -75,7 +95,7 @@ module Wavebird
       hash = symbolize(value)
       return nil if hash.nil?
 
-      hash = { revision: 1, updated_at_ms: now_ms }.merge(hash)
+      hash = DEFAULTS.merge(hash)
       return nil unless granted?(hash, config) && valid_integers?(hash, config, now_ms)
 
       hash.slice(:lifecycle_state, :revision, :updated_at_ms, :expires_at_ms)

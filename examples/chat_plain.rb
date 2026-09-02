@@ -93,9 +93,15 @@ Wavebird.configure do |config|
   #
   # Hard-coded here because an example has no CMP. A real app reads its own
   # consent record: `MyConsentStore.for(Current.session)`.
-  config.authoritative_consent = lambda do
-    { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }
-  end
+  #
+  # Computed **once**, not per call. The renderer compares the consent it gets in
+  # the turn options against the one on the placement payload and discards the
+  # render if the payload's looks newer -- so a resolver that returns a slightly
+  # different object each time makes the gem's own two resolutions disagree, and
+  # a filled slot stays hidden. A real app reads a stored consent record, which
+  # is stable by nature; an example computing timestamps has to be careful.
+  consent = { lifecycle_state: "granted", expires_at_ms: (Time.now.to_i + 3600) * 1000 }.freeze
+  config.authoritative_consent = -> { consent }
 
   # The gem swallows failures by design, so this is how you learn wavebird was
   # unreachable. In a real app: Rails.error.report(error, handled: true)
@@ -323,6 +329,22 @@ TEMPLATE = <<~'ERB'
 
         // Example-only endpoint; see Wavebird::ExampleDiagnostics. A real app
         // sends on_error to its error tracker, never to the browser.
+        // The renderer clears the slot when the turn finishes (finishTurn waits out
+        // require_viewability_ms, default 1000ms, then calls clearPlacement), so
+        // inspecting `slot.hidden` *after* the turn always reports "empty" -- even
+        // for an ad that rendered perfectly. Watch instead, and remember.
+        let adRendered = false;
+        (() => {
+          const watched = document.getElementById("wavebird-slot-below");
+          if (!watched) return;
+          new MutationObserver(() => {
+            if (watched.querySelector("iframe") ||
+                watched.getAttribute("data-wavebird-status") === "rendered") {
+              adRendered = true;
+            }
+          }).observe(watched, { childList: true, subtree: true, attributes: true });
+        })();
+
         async function slotReason() {
           try {
             const response = await fetch("/demo/diagnostics");
@@ -398,17 +420,19 @@ TEMPLATE = <<~'ERB'
             await send();
           }
 
-          const filled = slot.hidden === false;
           // An empty slot has three causes that look identical from here: an
           // honest no-fill, a missing key, and a request wavebird rejected. The
           // gem swallows the third by design, so ask the server which it was
           // rather than guessing in the copy -- guessing is what made a real
           // "Consent is not current" read as "no eligible campaign".
-          const why = filled ? null : await slotReason();
+          const why = adRendered ? null : await slotReason();
           report([
             `<b>render.js</b> ${loaded ? "loaded" : "not loaded"}`,
             "<b>turn</b> finished, answer delivered",
-            filled ? "<b>slot</b> filled — wavebird returned a placement" : why,
+            adRendered
+              ? "<b>slot</b> <b>filled and rendered</b> — the ad was shown for this turn, then " +
+                "cleared by the renderer, which is its normal lifecycle"
+              : why,
           ]);
           button.disabled = false;
           input.focus();

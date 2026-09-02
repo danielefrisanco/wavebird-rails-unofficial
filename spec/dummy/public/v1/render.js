@@ -2,7 +2,7 @@
 //
 // The suite runs with net connections disabled, so the real hosted script cannot
 // be fetched. This file implements the *contract* the real one exposes, verified
-// against docs/upstream/render-js-snapshot-2026-08-23.js:
+// against docs/upstream/render-js-snapshot-2026-09-02.js:
 //
 //   window.wavebird.withTurn(input, work)   -> startTurn + work + turn.finish()
 //   window.wavebird.startTurn(input)        -> {decision, finish, cancel}; POSTs
@@ -86,6 +86,27 @@
     return consent.expires_at_ms > Date.now();
   }
 
+  // Ported from selectAuthoritativeConsent in the 2026-09-02 snapshot. It is not
+  // a *gate* helper -- the drift check would not have demanded it -- but it is
+  // the rule that discarded a real fill: the renderer compares the consent
+  // passed to the turn against the consent it finds on the response, and throws
+  // the render away if the response's looks newer. The gem resolves consent
+  // twice per turn, so a resolver that is not stable makes the gem's own payload
+  // invalidate its own turn (#034). Modelled here so the system specs can catch
+  // that returning.
+  function selectAuthoritativeConsent(explicit, response) {
+    var current = resolveAuthoritativeConsent(explicit);
+    if (!current) return null;
+    if (response && typeof response === "object") {
+      if (response.lifecycle_state !== "granted") return null;
+      if (Number.isSafeInteger(response.revision) && Number.isSafeInteger(current.revision) &&
+          current.revision < response.revision) return null;
+      if (Number.isSafeInteger(response.updated_at_ms) && Number.isSafeInteger(current.updated_at_ms) &&
+          current.updated_at_ms < response.updated_at_ms) return null;
+    }
+    return current;
+  }
+
   function placementFrom(input) {
     if (!input) return null;
     if (input.placement) return input.placement;
@@ -135,9 +156,12 @@
     // `{placement: …}` or `{decision: …}` and unwraps either the same way.
     var placement = placementFrom(options);
     var render = renderFrom(placement);
-    var consent =
-      (options && options.authoritative_consent) ||
-      (placement && placement.authoritative_consent);
+    // The real renderer resolves the turn's consent *against* the one on the
+    // payload, rather than falling back to it. Same call, same order.
+    var consent = selectAuthoritativeConsent(
+      options && options.authoritative_consent,
+      placement && placement.authoritative_consent
+    ) || (placement && placement.authoritative_consent);
     if (!target || !render || !render.frame_url || !consentAllowsAdActivity(consent)) {
       api.clearPlacement({ target: target });
       return Promise.resolve(null);
